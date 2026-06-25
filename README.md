@@ -1,30 +1,34 @@
 # Emote Hue
 
-Emote Hue is a private emotional art journal for turning a short spoken or typed reflection into a living color portrait.
+**When words aren't enough, color speaks.**
 
-Tagline: **When words aren't enough, color speaks.**
+Emote Hue is an emotional art journal that turns spoken or typed reflections into living color portraits. It gives you a softer way to notice what you feel, adjust the color until it feels right, and keep a visual record over time.
 
-## Current MVP
+## What It Does
 
-- Expo React Native app with TypeScript and Expo Router
-- Onboarding flow with privacy-first guidance and personal color calibration
-- Voice or text reflection entry
-- Intensity selection before generating a portrait
-- Local mock hue analysis that produces structured emotion, palette, and motion data
-- Procedural color portrait rendering with React Native Skia
-- Private local journal storage with saved hue entries
-- Basic settings for privacy reminders and data clearing
-- Tests for schemas, color utilities, and privacy-safe sharing payloads
+- Offers a calm first-run experience
+- Learns your color associations through lightweight calibration
+- Captures a reflection by voice or text
+- Lets you choose intensity before generating a portrait
+- Renders living color portraits procedurally with React Native Skia
+- Saves hue entries into a visual journal
+- Includes settings for privacy reminders and local data clearing
 
-This milestone does not call a production AI service. The analysis flow uses a local mock engine so the app can be designed and tested without exposing API keys or sending user reflections to a server.
+## Personal by Design
 
-## Privacy Notes
+Emote Hue is designed to feel welcoming as an app and personal as a journal.
 
-- Raw audio is not saved by default.
 - Saved entries are local in this MVP.
+- Raw audio is not saved by default.
 - Share payloads exclude private notes and transcripts unless explicitly included by code.
 - The app avoids diagnostic or clinical certainty language.
-- Future AI and database calls should happen server-side only, with secrets stored outside the mobile app bundle.
+- Future AI and database calls should happen server-side only, with credentials kept outside the mobile app bundle.
+
+## Development Status
+
+This MVP uses a local mock analysis engine. That keeps the interface, color portrait flow, and journal experience testable without sending reflections to a production service.
+
+The project also includes TypeScript checks, linting, formatting, and Jest tests for schemas, color utilities, and privacy-safe sharing helpers.
 
 ## Getting Started
 
