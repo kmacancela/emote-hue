@@ -1,0 +1,6 @@
+AGENTS.md
+docs/**
+dist/**
+pnpm-lock.yaml
+.expo/**
+node_modules/**
