@@ -5,8 +5,10 @@ import { StyleSheet, View } from 'react-native';
 import { BrandText } from '@/src/components/BrandText';
 import { Button } from '@/src/components/Button';
 import { EmotionChips } from '@/src/components/EmotionChips';
+import { FlowHeader } from '@/src/components/FlowHeader';
 import { HueCanvas } from '@/src/components/HueCanvas';
 import { Screen } from '@/src/components/Screen';
+import { SupportNotice } from '@/src/components/SupportNotice';
 import { useColorCalibration } from '@/src/hooks/useColorCalibration';
 import { useHueAnalysis } from '@/src/hooks/useHueAnalysis';
 import { useReducedMotion } from '@/src/hooks/useReducedMotion';
@@ -66,17 +68,21 @@ export default function PortraitScreen() {
 
   if (!draft) {
     return (
-      <Screen center scroll={false}>
-        <BrandText variant="title">No reflection is waiting.</BrandText>
-        <Button onPress={() => router.replace('/create/record')}>
-          Create Hue Entry
-        </Button>
+      <Screen scroll={false}>
+        <FlowHeader step={3} />
+        <View style={styles.emptyState}>
+          <BrandText variant="title">No reflection is waiting.</BrandText>
+          <Button onPress={() => router.replace('/create/record')}>
+            Create Hue Entry
+          </Button>
+        </View>
       </Screen>
     );
   }
 
   return (
     <Screen>
+      <FlowHeader step={3} />
       <View style={styles.stack}>
         <BrandText variant="title">Here is your feeling in color.</BrandText>
         <BrandText muted>
@@ -89,14 +95,7 @@ export default function PortraitScreen() {
           <HueCanvas analysis={analysis} reduceMotion={reduceMotion} />
           {analysis.safetyFlags.crisisLanguage ||
           analysis.safetyFlags.selfHarmLanguage ? (
-            <View style={styles.supportNotice}>
-              <BrandText>
-                This sounds really heavy. Emote Hue can help you express what
-                you feel, but it cannot provide emergency support. Consider
-                reaching out to someone you trust or a local crisis resource
-                now.
-              </BrandText>
-            </View>
+            <SupportNotice />
           ) : null}
           <BrandText muted>{analysis.userFacingSummary}</BrandText>
           <EmotionChips labels={analysis.emotionWords} />
@@ -140,18 +139,17 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: spacing.sm,
   },
+  emptyState: {
+    backgroundColor: colors.transparent,
+    flex: 1,
+    gap: spacing.lg,
+    justifyContent: 'center',
+  },
   error: {
     color: colors.danger,
   },
   stack: {
     backgroundColor: colors.transparent,
     gap: spacing.sm,
-  },
-  supportNotice: {
-    backgroundColor: '#2A1D24',
-    borderColor: colors.danger,
-    borderRadius: 12,
-    borderWidth: StyleSheet.hairlineWidth,
-    padding: spacing.md,
   },
 });

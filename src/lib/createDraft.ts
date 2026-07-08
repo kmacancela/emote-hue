@@ -29,10 +29,23 @@ export async function startCreateDraft(
     recordingUri,
     intensity: 5,
     startedAt: new Date().toISOString(),
+    status: 'active',
   };
 
   await saveCreateDraft(draft);
   return draft;
+}
+
+export async function markDraftPending() {
+  const draft = await loadCreateDraft();
+
+  if (!draft) {
+    return null;
+  }
+
+  const next: CreateDraft = { ...draft, status: 'pending' };
+  await saveCreateDraft(next);
+  return next;
 }
 
 export async function updateDraftIntensity(intensity: number) {

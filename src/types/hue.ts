@@ -94,4 +94,5 @@ export type CreateDraft = {
   intensity: number;
   analysis?: HueAnalysis;
   startedAt: string;
+  status?: 'pending' | 'active';
 };

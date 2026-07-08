@@ -10,7 +10,7 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { colors, gradients, spacing } from '@/src/theme';
+import { breakpoints, colors, gradients, spacing } from '@/src/theme';
 
 type ScreenProps = PropsWithChildren<{
   scroll?: boolean;
@@ -25,7 +25,7 @@ export function Screen({
   scroll = true,
 }: ScreenProps) {
   const { width } = useWindowDimensions();
-  const isTablet = width >= 768;
+  const isTablet = width >= breakpoints.tablet;
   const contentStyle = [
     styles.content,
     padded && styles.padded,

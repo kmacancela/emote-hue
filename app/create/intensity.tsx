@@ -4,6 +4,7 @@ import { StyleSheet, View } from 'react-native';
 
 import { BrandText } from '@/src/components/BrandText';
 import { Button } from '@/src/components/Button';
+import { FlowHeader } from '@/src/components/FlowHeader';
 import { IntensityMeter } from '@/src/components/IntensityMeter';
 import { Screen } from '@/src/components/Screen';
 import type { CreateDraft } from '@/src/types/hue';
@@ -33,20 +34,24 @@ export default function IntensityScreen() {
 
   if (!draft) {
     return (
-      <Screen center scroll={false}>
-        <BrandText variant="title">No reflection is waiting.</BrandText>
-        <BrandText muted>
-          Start with a few words, then shape the intensity.
-        </BrandText>
-        <Button onPress={() => router.replace('/create/record')}>
-          Create Hue Entry
-        </Button>
+      <Screen scroll={false}>
+        <FlowHeader step={2} />
+        <View style={styles.emptyState}>
+          <BrandText variant="title">No reflection is waiting.</BrandText>
+          <BrandText muted>
+            Start with a few words, then shape the intensity.
+          </BrandText>
+          <Button onPress={() => router.replace('/create/record')}>
+            Create Hue Entry
+          </Button>
+        </View>
       </Screen>
     );
   }
 
   return (
-    <Screen center>
+    <Screen>
+      <FlowHeader step={2} />
       <View style={styles.stack}>
         <BrandText variant="title">
           How strong does this feeling feel?
@@ -66,6 +71,12 @@ export default function IntensityScreen() {
 }
 
 const styles = StyleSheet.create({
+  emptyState: {
+    backgroundColor: colors.transparent,
+    flex: 1,
+    gap: spacing.lg,
+    justifyContent: 'center',
+  },
   stack: {
     backgroundColor: colors.transparent,
     gap: spacing.sm,

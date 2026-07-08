@@ -4,6 +4,7 @@ import { StyleSheet, TextInput, View } from 'react-native';
 
 import { BrandText } from '@/src/components/BrandText';
 import { Button } from '@/src/components/Button';
+import { FlowHeader } from '@/src/components/FlowHeader';
 import { HueCanvas } from '@/src/components/HueCanvas';
 import { PrivacyNotice } from '@/src/components/PrivacyNotice';
 import { Screen } from '@/src/components/Screen';
@@ -68,20 +69,26 @@ export default function SaveScreen() {
 
   if (!draft?.analysis) {
     return (
-      <Screen center scroll={false}>
-        <BrandText variant="title">No portrait is waiting.</BrandText>
-        <Button onPress={() => router.replace('/create/record')}>
-          Create Hue Entry
-        </Button>
+      <Screen scroll={false}>
+        <FlowHeader step={3} />
+        <View style={styles.emptyState}>
+          <BrandText variant="title">No portrait is waiting.</BrandText>
+          <Button onPress={() => router.replace('/create/record')}>
+            Create Hue Entry
+          </Button>
+        </View>
       </Screen>
     );
   }
 
   return (
     <Screen>
+      <FlowHeader step={3} />
       <View style={styles.stack}>
         <BrandText variant="title">
-          Save this as your first Hue Entry?
+          {isFirstEntry
+            ? 'Save this as your first Hue Entry?'
+            : 'Save this Hue Entry?'}
         </BrandText>
         {!isFirstEntry ? (
           <BrandText muted>Your color language keeps growing.</BrandText>
@@ -121,6 +128,12 @@ export default function SaveScreen() {
 }
 
 const styles = StyleSheet.create({
+  emptyState: {
+    backgroundColor: colors.transparent,
+    flex: 1,
+    gap: spacing.lg,
+    justifyContent: 'center',
+  },
   input: {
     backgroundColor: colors.inkSoft,
     borderColor: colors.lineStrong,

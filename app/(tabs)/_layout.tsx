@@ -1,3 +1,4 @@
+import { Feather } from '@expo/vector-icons';
 import { SymbolView } from 'expo-symbols';
 import { Tabs } from 'expo-router';
 
@@ -31,9 +32,8 @@ export default function TabLayout() {
             <SymbolView
               name={{
                 ios: 'circle.hexagongrid.circle',
-                android: 'home',
-                web: 'home',
               }}
+              fallback={<Feather color={color} name="home" size={24} />}
               tintColor={color}
               size={24}
             />
@@ -48,9 +48,8 @@ export default function TabLayout() {
             <SymbolView
               name={{
                 ios: 'square.grid.2x2',
-                android: 'collections',
-                web: 'collections',
               }}
+              fallback={<Feather color={color} name="grid" size={24} />}
               tintColor={color}
               size={24}
             />
@@ -65,9 +64,8 @@ export default function TabLayout() {
             <SymbolView
               name={{
                 ios: 'lock.shield',
-                android: 'settings',
-                web: 'settings',
               }}
+              fallback={<Feather color={color} name="shield" size={24} />}
               tintColor={color}
               size={24}
             />

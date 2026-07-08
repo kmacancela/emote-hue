@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'expo-router';
 import { StyleSheet, TextInput, View } from 'react-native';
 
 import { BrandText } from '@/src/components/BrandText';
 import { Button } from '@/src/components/Button';
+import { FlowHeader } from '@/src/components/FlowHeader';
 import { MicOrb } from '@/src/components/MicOrb';
 import { PrivacyNotice } from '@/src/components/PrivacyNotice';
 import { Screen } from '@/src/components/Screen';
@@ -12,7 +13,7 @@ import {
   useAudioRecorder,
 } from '@/src/hooks/useAudioRecorder';
 import { useReducedMotion } from '@/src/hooks/useReducedMotion';
-import { startCreateDraft } from '@/src/lib/createDraft';
+import { markDraftPending, startCreateDraft } from '@/src/lib/createDraft';
 import { colors, radius, spacing, typography } from '@/src/theme';
 
 function formatElapsedTime(durationMillis: number) {
@@ -25,6 +26,7 @@ function formatElapsedTime(durationMillis: number) {
 
 export default function RecordScreen() {
   const router = useRouter();
+  const draftStarted = useRef(false);
   const [reflection, setReflection] = useState('');
   const [textOnly, setTextOnly] = useState(false);
   const recorder = useAudioRecorder();
@@ -35,6 +37,14 @@ export default function RecordScreen() {
     Math.max(0, maxDurationMillis - recorder.durationMillis) / 1000,
   );
   const showRecordingWarning = recorder.isRecording && remainingSeconds <= 10;
+
+  useEffect(() => {
+    return () => {
+      if (draftStarted.current) {
+        void markDraftPending();
+      }
+    };
+  }, []);
 
   async function handleMicPress() {
     if (recorder.isRecording) {
@@ -52,11 +62,13 @@ export default function RecordScreen() {
       'A private voice reflection was recorded and will be translated by the mock local hue engine.';
 
     await startCreateDraft(mode, text, recorder.recordingUri);
+    draftStarted.current = true;
     router.push('/create/intensity');
   }
 
   return (
     <Screen>
+      <FlowHeader step={1} />
       <View style={styles.stack}>
         <BrandText variant="title">Speak or type what feels present.</BrandText>
         <BrandText muted>
