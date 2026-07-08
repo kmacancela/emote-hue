@@ -1,6 +1,13 @@
-import { useEffect, useMemo } from 'react';
-import type { DimensionValue, StyleProp, ViewStyle } from 'react-native';
+import type { RefObject } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
+import type {
+  ColorValue,
+  DimensionValue,
+  StyleProp,
+  ViewStyle,
+} from 'react-native';
 import { StyleSheet, View } from 'react-native';
+import type { CanvasRef } from '@shopify/react-native-skia';
 import { LinearGradient } from 'expo-linear-gradient';
 import Animated, {
   interpolate,
@@ -12,6 +19,7 @@ import Animated, {
 
 import type { HueAnalysis } from '@/src/types/hue';
 import { colors, radius } from '@/src/theme';
+import { derivePortraitGeometry } from '@/src/lib/portraitGeometry';
 import { normalizeHueAnalysis, withAlpha } from '@/src/utils/color';
 
 type HueCanvasProps = {
@@ -19,19 +27,64 @@ type HueCanvasProps = {
   interactive?: boolean;
   preview?: boolean;
   reduceMotion?: boolean;
+  seedKey?: string;
+  onCanvasRef?: (ref: RefObject<CanvasRef | null>) => void;
   style?: StyleProp<ViewStyle>;
 };
+
+type WebViewStyle = ViewStyle & { backgroundImage?: string };
+
+function percent(value: number): DimensionValue {
+  return `${value * 100}%` as DimensionValue;
+}
+
+function gradientColorsTuple(
+  gradientColors: ColorValue[],
+): readonly [ColorValue, ColorValue, ...ColorValue[]] {
+  const first = gradientColors[0] ?? colors.ink;
+  const second = gradientColors[1] ?? first;
+
+  return [first, second, ...gradientColors.slice(2)];
+}
+
+function gradientLocationsTuple(
+  gradientLocations: number[],
+): readonly [number, number, ...number[]] {
+  const first = gradientLocations[0] ?? 0;
+  const second = gradientLocations[1] ?? 1;
+
+  return [first, second, ...gradientLocations.slice(2)];
+}
+
+function radialGradient(
+  color: string,
+  light: string,
+  base: string,
+  opacity: number,
+) {
+  return `radial-gradient(circle, ${withAlpha(color, opacity)} 0%, ${withAlpha(
+    light,
+    opacity * 0.3,
+  )} 44%, ${withAlpha(base, 0)} 72%)`;
+}
 
 export function HueCanvas({
   analysis,
   interactive = true,
   preview = false,
   reduceMotion = false,
+  seedKey = 'sample',
+  onCanvasRef,
   style,
 }: HueCanvasProps) {
+  const canvasRef = useRef<CanvasRef | null>(null);
   const safeAnalysis = useMemo(
     () => normalizeHueAnalysis(analysis),
     [analysis],
+  );
+  const geometry = useMemo(
+    () => derivePortraitGeometry(safeAnalysis, seedKey),
+    [safeAnalysis, seedKey],
   );
   const progress = useSharedValue(0);
   const palette = safeAnalysis.palette;
@@ -48,6 +101,28 @@ export function HueCanvas({
   const neutral =
     palette.find((color) => color.role === 'neutral')?.hex ?? colors.sage;
   const speed = 6200 - safeAnalysis.visual.animationSpeed * 3300;
+  const roleColors = {
+    accent,
+    base,
+    light,
+    neutral,
+    shadow,
+  };
+  const particleColors = { accent, light };
+  const gradientColors = gradientColorsTuple(
+    geometry.gradientStops.map((stop) => stop.color),
+  );
+  const gradientLocations = gradientLocationsTuple(
+    geometry.gradientStops.map((stop) => stop.position),
+  );
+  const particleLimit = preview ? 6 : geometry.particles.length;
+  const particles = geometry.particles.slice(0, particleLimit);
+  const grain = preview ? [] : (geometry.grain ?? []);
+  const blur = 18 + safeAnalysis.visual.edgeSoftness * 22;
+
+  useEffect(() => {
+    onCanvasRef?.(canvasRef);
+  }, [onCanvasRef]);
 
   useEffect(() => {
     if (
@@ -81,53 +156,88 @@ export function HueCanvas({
       ]}
     >
       <LinearGradient
-        colors={[base, shadow, withAlpha(accent, 0.42)]}
+        colors={gradientColors}
         end={{ x: 1, y: 1 }}
+        locations={gradientLocations}
         start={{ x: 0, y: 0 }}
         style={StyleSheet.absoluteFill}
       />
-      <View
-        style={[
-          styles.bloom,
-          {
-            backgroundColor: withAlpha(accent, 0.72),
-            height: `${72 + safeAnalysis.visual.brightness * 18}%`,
-            left: '14%',
-            top:
-              safeAnalysis.visual.composition === 'horizon_wave'
-                ? '34%'
-                : '14%',
-            width: `${72 + safeAnalysis.visual.brightness * 18}%`,
-          },
-        ]}
-      />
-      <View
-        style={[
-          styles.smallGlow,
-          {
-            backgroundColor: withAlpha(
-              safeAnalysis.visual.warmth > 0.55 ? light : neutral,
-              0.5,
-            ),
-            left: safeAnalysis.visual.warmth > 0.55 ? '54%' : '10%',
-            top: '18%',
-          },
-        ]}
-      />
-      {Array.from({ length: preview ? 5 : 12 }).map((_, index) => {
-        const left = `${(index * 73) % 100}%` as DimensionValue;
-        const top = `${(index * 41) % 100}%` as DimensionValue;
-        const dotSize =
-          3 + safeAnalysis.visual.particleDensity * 6 + (index % 3);
-        const particleStyle: ViewStyle = {
-          backgroundColor: withAlpha(index % 2 === 0 ? light : accent, 0.28),
-          height: dotSize,
-          left,
-          top,
-          width: dotSize,
+
+      {geometry.ribbonPoints?.map((point, index) => {
+        const beadRadius = 0.06;
+        const ribbonStyle: WebViewStyle = {
+          backgroundImage: radialGradient(accent, light, base, 0.14),
+          filter: `blur(${Math.round(blur * 0.8)}px)`,
+          height: percent(beadRadius * 2),
+          left: percent(point.x - beadRadius),
+          top: percent(point.y - beadRadius),
+          width: percent(beadRadius * 2),
         };
 
-        return <View key={index} style={[styles.particle, particleStyle]} />;
+        return (
+          <View
+            key={`ribbon-${index}`}
+            style={[styles.ribbonBead, ribbonStyle]}
+          />
+        );
+      })}
+
+      {geometry.blooms.map((bloom, index) => {
+        const bloomStyle: WebViewStyle = {
+          backgroundColor: withAlpha(roleColors[bloom.role], bloom.opacity),
+          backgroundImage: radialGradient(
+            roleColors[bloom.role],
+            light,
+            base,
+            bloom.opacity,
+          ),
+          filter: `blur(${Math.round(blur)}px)`,
+          height: percent(bloom.r * 2),
+          left: percent(bloom.cx - bloom.r),
+          top: percent(bloom.cy - bloom.r),
+          width: percent(bloom.r * 2),
+        };
+
+        return (
+          <View key={`bloom-${index}`} style={[styles.bloom, bloomStyle]} />
+        );
+      })}
+
+      {particles.map((particle, index) => {
+        const particleStyle: ViewStyle = {
+          backgroundColor: withAlpha(
+            particleColors[particle.colorRole],
+            particle.opacity,
+          ),
+          height: percent(particle.r * 2),
+          left: percent(particle.x - particle.r),
+          top: percent(particle.y - particle.r),
+          width: percent(particle.r * 2),
+        };
+
+        return (
+          <View
+            key={`particle-${index}`}
+            style={[styles.particle, particleStyle]}
+          />
+        );
+      })}
+
+      {grain.map((speckle, index) => {
+        const speckleStyle: ViewStyle = {
+          backgroundColor: withAlpha(
+            safeAnalysis.visual.texture === 'ink' ? shadow : light,
+            speckle.opacity,
+          ),
+          height: percent(speckle.r * 2),
+          left: percent(speckle.x - speckle.r),
+          top: percent(speckle.y - speckle.r),
+          width: percent(speckle.r * 2),
+        };
+
+        return (
+          <View key={`grain-${index}`} style={[styles.grain, speckleStyle]} />
+        );
       })}
     </Animated.View>
   );
@@ -136,8 +246,6 @@ export function HueCanvas({
 const styles = StyleSheet.create({
   bloom: {
     borderRadius: radius.pill,
-    filter: 'blur(28px)',
-    opacity: 0.72,
     position: 'absolute',
   },
   frame: {
@@ -156,12 +264,13 @@ const styles = StyleSheet.create({
   previewFrame: {
     borderRadius: radius.md,
   },
-  smallGlow: {
+  grain: {
     borderRadius: radius.pill,
-    filter: 'blur(16px)',
-    height: '38%',
-    opacity: 0.58,
     position: 'absolute',
-    width: '38%',
+  },
+  ribbonBead: {
+    borderRadius: radius.pill,
+    opacity: 0.82,
+    position: 'absolute',
   },
 });

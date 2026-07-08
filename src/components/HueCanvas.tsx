@@ -1,3 +1,4 @@
+import type { RefObject } from 'react';
 import { useEffect, useMemo, useState } from 'react';
 import type { StyleProp, ViewStyle } from 'react-native';
 import { StyleSheet } from 'react-native';
@@ -12,15 +13,19 @@ import {
   Blur,
   Canvas,
   Circle,
+  type CanvasRef,
   Group,
+  Path,
   LinearGradient as SkiaLinearGradient,
   RadialGradient,
   Rect,
+  useCanvasRef,
   vec,
 } from '@shopify/react-native-skia';
 
 import type { HueAnalysis } from '@/src/types/hue';
 import { colors, radius } from '@/src/theme';
+import { derivePortraitGeometry } from '@/src/lib/portraitGeometry';
 import { normalizeHueAnalysis, withAlpha } from '@/src/utils/color';
 
 type HueCanvasProps = {
@@ -28,19 +33,61 @@ type HueCanvasProps = {
   interactive?: boolean;
   preview?: boolean;
   reduceMotion?: boolean;
+  seedKey?: string;
+  onCanvasRef?: (ref: RefObject<CanvasRef | null>) => void;
   style?: StyleProp<ViewStyle>;
 };
+
+function buildRibbonPath(
+  points: { x: number; y: number }[] | undefined,
+  width: number,
+  height: number,
+) {
+  if (!points || points.length < 2) {
+    return undefined;
+  }
+
+  const scaled = points.map((point) => ({
+    x: point.x * width,
+    y: point.y * height,
+  }));
+  const [firstPoint] = scaled;
+  const commands = [`M ${firstPoint.x} ${firstPoint.y}`];
+
+  for (let index = 1; index < scaled.length - 1; index += 1) {
+    const point = scaled[index];
+    const nextPoint = scaled[index + 1];
+    const midPoint = {
+      x: (point.x + nextPoint.x) / 2,
+      y: (point.y + nextPoint.y) / 2,
+    };
+
+    commands.push(`Q ${point.x} ${point.y} ${midPoint.x} ${midPoint.y}`);
+  }
+
+  const lastPoint = scaled[scaled.length - 1];
+  commands.push(`L ${lastPoint.x} ${lastPoint.y}`);
+
+  return commands.join(' ');
+}
 
 export function HueCanvas({
   analysis,
   interactive = true,
   preview = false,
   reduceMotion = false,
+  seedKey = 'sample',
+  onCanvasRef,
   style,
 }: HueCanvasProps) {
+  const canvasRef = useCanvasRef();
   const safeAnalysis = useMemo(
     () => normalizeHueAnalysis(analysis),
     [analysis],
+  );
+  const geometry = useMemo(
+    () => derivePortraitGeometry(safeAnalysis, seedKey),
+    [safeAnalysis, seedKey],
   );
   const [size, setSize] = useState({ width: 1, height: 1 });
   const progress = useSharedValue(0);
@@ -58,13 +105,33 @@ export function HueCanvas({
   const neutral =
     palette.find((color) => color.role === 'neutral')?.hex ?? colors.sage;
   const speed = 6200 - safeAnalysis.visual.animationSpeed * 3300;
-  const glowRadius =
-    Math.max(size.width, size.height) *
-    (0.34 + safeAnalysis.visual.brightness * 0.18);
-  const centerY =
-    safeAnalysis.visual.composition === 'horizon_wave'
-      ? size.height * 0.62
-      : size.height * 0.5;
+  const particleColors = { accent, light };
+  const roleColors = {
+    accent,
+    base,
+    light,
+    neutral,
+    shadow,
+  };
+  const gradientColors = geometry.gradientStops.map((stop) => stop.color);
+  const gradientPositions = geometry.gradientStops.map((stop) => stop.position);
+  const particleLimit = preview ? 6 : geometry.particles.length;
+  const particles = geometry.particles.slice(0, particleLimit);
+  const grain = preview ? [] : (geometry.grain ?? []);
+  const canvasMin = Math.min(size.width, size.height);
+  const canvasMax = Math.max(size.width, size.height);
+  const blur = safeAnalysis.visual.edgeSoftness * 18 + 4;
+  const ribbonPath = buildRibbonPath(
+    geometry.ribbonPoints,
+    size.width,
+    size.height,
+  );
+  const ribbonStrokeWidth =
+    canvasMax * (safeAnalysis.visual.texture === 'watercolor' ? 0.088 : 0.072);
+
+  useEffect(() => {
+    onCanvasRef?.(canvasRef);
+  }, [canvasRef, onCanvasRef]);
 
   useEffect(() => {
     if (
@@ -101,68 +168,78 @@ export function HueCanvas({
         style,
       ]}
     >
-      <Canvas style={StyleSheet.absoluteFill}>
+      <Canvas ref={canvasRef} style={StyleSheet.absoluteFill}>
         <Rect height={size.height} width={size.width} x={0} y={0}>
           <SkiaLinearGradient
-            colors={[base, shadow, withAlpha(accent, 0.42)]}
+            colors={gradientColors}
             end={vec(size.width, size.height)}
+            positions={gradientPositions}
             start={vec(0, 0)}
           />
         </Rect>
 
-        <Group opacity={0.88}>
-          <Circle cx={size.width * 0.5} cy={centerY} r={glowRadius}>
-            <RadialGradient
-              c={vec(size.width * 0.5, centerY)}
-              colors={[
-                withAlpha(accent, 0.9),
-                withAlpha(light, 0.32),
-                withAlpha(base, 0),
-              ]}
-              r={glowRadius}
-            />
-            <Blur blur={safeAnalysis.visual.edgeSoftness * 18 + 4} />
-          </Circle>
-        </Group>
-
-        <Group opacity={0.56}>
-          <Circle
-            cx={size.width * (safeAnalysis.visual.warmth > 0.55 ? 0.68 : 0.32)}
-            cy={size.height * 0.35}
-            r={size.width * 0.26}
+        {ribbonPath ? (
+          <Path
+            color={withAlpha(accent, 0.16)}
+            path={ribbonPath}
+            style="stroke"
+            strokeCap="round"
+            strokeJoin="round"
+            strokeWidth={ribbonStrokeWidth}
           >
-            <RadialGradient
-              c={vec(
-                size.width * (safeAnalysis.visual.warmth > 0.55 ? 0.68 : 0.32),
-                size.height * 0.35,
-              )}
-              colors={[
-                withAlpha(light, 0.78),
-                withAlpha(neutral, 0.22),
-                withAlpha(base, 0),
-              ]}
-              r={size.width * 0.26}
-            />
-            <Blur blur={12} />
-          </Circle>
-        </Group>
+            <Blur blur={blur * 1.25} />
+          </Path>
+        ) : null}
 
-        {Array.from({ length: preview ? 5 : 12 }).map((_, index) => {
-          const x = ((index * 73) % 100) / 100;
-          const y = ((index * 41) % 100) / 100;
-          const radiusValue =
-            1.8 + safeAnalysis.visual.particleDensity * 4 + (index % 3);
+        {geometry.blooms.map((bloom, index) => {
+          const cx = size.width * bloom.cx;
+          const cy = size.height * bloom.cy;
+          const bloomRadius = canvasMax * bloom.r;
+          const bloomColor = roleColors[bloom.role];
 
           return (
-            <Circle
-              color={withAlpha(index % 2 === 0 ? light : accent, 0.22)}
-              cx={size.width * x}
-              cy={size.height * y}
-              key={index}
-              r={radiusValue}
-            />
+            <Group key={`bloom-${index}`} opacity={0.9}>
+              <Circle cx={cx} cy={cy} r={bloomRadius}>
+                <RadialGradient
+                  c={vec(cx, cy)}
+                  colors={[
+                    withAlpha(bloomColor, bloom.opacity),
+                    withAlpha(light, bloom.opacity * 0.28),
+                    withAlpha(base, 0),
+                  ]}
+                  r={bloomRadius}
+                />
+                <Blur blur={blur} />
+              </Circle>
+            </Group>
           );
         })}
+
+        {particles.map((particle, index) => (
+          <Circle
+            color={withAlpha(
+              particleColors[particle.colorRole],
+              particle.opacity,
+            )}
+            cx={size.width * particle.x}
+            cy={size.height * particle.y}
+            key={`particle-${index}`}
+            r={canvasMin * particle.r}
+          />
+        ))}
+
+        {grain.map((speckle, index) => (
+          <Circle
+            color={withAlpha(
+              safeAnalysis.visual.texture === 'ink' ? shadow : light,
+              speckle.opacity,
+            )}
+            cx={size.width * speckle.x}
+            cy={size.height * speckle.y}
+            key={`grain-${index}`}
+            r={Math.max(0.55, canvasMin * speckle.r)}
+          />
+        ))}
       </Canvas>
     </Animated.View>
   );

@@ -37,7 +37,9 @@
           "resizeMode": "contain",
           "backgroundColor": "#111018"
         }
-      ]
+      ],
+      "expo-sharing",
+      "expo-speech-recognition"
     ],
     "experiments": {
       "typedRoutes": true

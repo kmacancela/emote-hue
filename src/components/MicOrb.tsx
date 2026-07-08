@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { Feather } from '@expo/vector-icons';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import Animated, {
@@ -66,7 +67,11 @@ export function MicOrb({
           style={styles.orb}
         >
           <View style={styles.inner}>
-            <Text style={styles.symbol}>{isRecording ? 'stop' : 'rec'}</Text>
+            <Feather
+              color={colors.mist}
+              name={isRecording ? 'square' : 'mic'}
+              size={26}
+            />
             <Text style={styles.label}>
               {isRecording ? 'Listening' : 'Speak'}
             </Text>
@@ -107,10 +112,5 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     minHeight: 160,
-  },
-  symbol: {
-    color: colors.mist,
-    fontSize: 24,
-    lineHeight: 28,
   },
 });

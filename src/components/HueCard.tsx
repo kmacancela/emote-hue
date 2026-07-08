@@ -1,4 +1,4 @@
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Image, Pressable, StyleSheet, View } from 'react-native';
 
 import type { HueEntry } from '@/src/types/hue';
 import { colors, radius, spacing } from '@/src/theme';
@@ -19,13 +19,22 @@ export function HueCard({ entry, onPress }: HueCardProps) {
       onPress={onPress}
       style={({ pressed }) => [styles.card, pressed && styles.pressed]}
     >
-      <HueCanvas
-        analysis={entry.analysis}
-        interactive={false}
-        preview
-        reduceMotion
-        style={styles.art}
-      />
+      {entry.staticPreviewUri ? (
+        <Image
+          resizeMode="cover"
+          source={{ uri: entry.staticPreviewUri }}
+          style={[styles.art, styles.staticPreview]}
+        />
+      ) : (
+        <HueCanvas
+          analysis={entry.analysis}
+          interactive={false}
+          preview
+          reduceMotion
+          seedKey={entry.id}
+          style={styles.art}
+        />
+      )}
       <View style={styles.meta}>
         <BrandText variant="small">
           {entry.title || formatShortDate(entry.createdAt)}
@@ -56,7 +65,7 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
     borderWidth: StyleSheet.hairlineWidth,
     gap: spacing.sm,
-    minWidth: 168,
+    minWidth: 0,
     padding: spacing.sm,
   },
   meta: {
@@ -72,6 +81,14 @@ const styles = StyleSheet.create({
   pressed: {
     opacity: 0.82,
     transform: [{ scale: 0.99 }],
+  },
+  staticPreview: {
+    backgroundColor: colors.inkRaised,
+    borderColor: colors.line,
+    borderRadius: radius.md,
+    borderWidth: StyleSheet.hairlineWidth,
+    overflow: 'hidden',
+    width: '100%',
   },
   swatch: {
     flex: 1,

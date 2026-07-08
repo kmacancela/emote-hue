@@ -70,6 +70,7 @@ export type HueEntry = {
   createdAt: string;
   title?: string;
   privateNote?: string;
+  staticPreviewUri?: string;
   transcriptSummary?: string;
   transcript?: string;
   intensity: number;
@@ -94,4 +95,5 @@ export type CreateDraft = {
   intensity: number;
   analysis?: HueAnalysis;
   startedAt: string;
+  status?: 'pending' | 'active';
 };

@@ -1,4 +1,4 @@
-import type { PropsWithChildren } from 'react';
+import type { PropsWithChildren, RefObject } from 'react';
 import {
   KeyboardAvoidingView,
   Platform,
@@ -10,12 +10,13 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { colors, gradients, spacing } from '@/src/theme';
+import { breakpoints, colors, gradients, spacing } from '@/src/theme';
 
 type ScreenProps = PropsWithChildren<{
   scroll?: boolean;
   center?: boolean;
   padded?: boolean;
+  scrollRef?: RefObject<ScrollView | null>;
 }>;
 
 export function Screen({
@@ -23,9 +24,10 @@ export function Screen({
   children,
   padded = true,
   scroll = true,
+  scrollRef,
 }: ScreenProps) {
   const { width } = useWindowDimensions();
-  const isTablet = width >= 768;
+  const isTablet = width >= breakpoints.tablet;
   const contentStyle = [
     styles.content,
     padded && styles.padded,
@@ -44,6 +46,7 @@ export function Screen({
             <ScrollView
               contentContainerStyle={contentStyle}
               keyboardShouldPersistTaps="handled"
+              ref={scrollRef}
               showsVerticalScrollIndicator={false}
             >
               {children}

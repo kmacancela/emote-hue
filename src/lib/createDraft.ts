@@ -1,5 +1,6 @@
 import type { CreateDraft, HueAnalysis, ReflectionMode } from '@/src/types/hue';
 import { readJson, removeItem, writeJson } from './storage';
+import { deleteRecordingFile } from './recordingFiles';
 
 const DRAFT_KEY = '@emote-hue/create-draft';
 
@@ -16,16 +17,35 @@ export async function startCreateDraft(
   reflection: string,
   recordingUri?: string,
 ) {
+  const existing = await loadCreateDraft();
+
+  if (existing?.recordingUri && existing.recordingUri !== recordingUri) {
+    await deleteRecordingFile(existing.recordingUri);
+  }
+
   const draft: CreateDraft = {
     mode,
     reflection,
     recordingUri,
     intensity: 5,
     startedAt: new Date().toISOString(),
+    status: 'active',
   };
 
   await saveCreateDraft(draft);
   return draft;
+}
+
+export async function markDraftPending() {
+  const draft = await loadCreateDraft();
+
+  if (!draft) {
+    return null;
+  }
+
+  const next: CreateDraft = { ...draft, status: 'pending' };
+  await saveCreateDraft(next);
+  return next;
 }
 
 export async function updateDraftIntensity(intensity: number) {
@@ -53,5 +73,8 @@ export async function updateDraftAnalysis(analysis: HueAnalysis) {
 }
 
 export async function clearCreateDraft() {
+  const draft = await loadCreateDraft();
+
+  await deleteRecordingFile(draft?.recordingUri);
   await removeItem(DRAFT_KEY);
 }
