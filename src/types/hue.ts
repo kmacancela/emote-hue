@@ -70,6 +70,7 @@ export type HueEntry = {
   createdAt: string;
   title?: string;
   privateNote?: string;
+  staticPreviewUri?: string;
   transcriptSummary?: string;
   transcript?: string;
   intensity: number;

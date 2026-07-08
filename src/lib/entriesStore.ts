@@ -1,4 +1,5 @@
 import type { HueAnalysis, HueEntry } from '@/src/types/hue';
+import { deleteFileQuietly } from './fileCleanup';
 import { hueEntrySchema } from './schemas';
 import { readJson, writeJson } from './storage';
 
@@ -8,6 +9,7 @@ export type SaveEntryInput = {
   analysis: HueAnalysis;
   title?: string;
   privateNote?: string;
+  staticPreviewUri?: string;
   transcriptSummary?: string;
   transcript?: string;
 };
@@ -53,6 +55,7 @@ export async function saveStoredEntry({
   analysis,
   title,
   privateNote,
+  staticPreviewUri,
   transcriptSummary,
   transcript,
 }: SaveEntryInput): Promise<{ entries: HueEntry[]; entry: HueEntry }> {
@@ -62,6 +65,7 @@ export async function saveStoredEntry({
     createdAt: new Date().toISOString(),
     title: title?.trim() || undefined,
     privateNote: privateNote?.trim() || undefined,
+    staticPreviewUri,
     transcriptSummary,
     transcript,
     intensity: analysis.intensity,
@@ -76,10 +80,23 @@ export async function saveStoredEntry({
 
 export async function deleteStoredEntry(id: string) {
   const stored = await readStoredEntries();
+  const deletedEntry = stored.find((entry) => entry.id === id);
+  const entries = await persistStoredEntries(
+    stored.filter((entry) => entry.id !== id),
+  );
 
-  return persistStoredEntries(stored.filter((entry) => entry.id !== id));
+  await deleteFileQuietly(deletedEntry?.staticPreviewUri);
+
+  return entries;
 }
 
 export async function deleteAllStoredEntries() {
-  return persistStoredEntries([]);
+  const stored = await readStoredEntries();
+  const entries = await persistStoredEntries([]);
+
+  await Promise.all(
+    stored.map((entry) => deleteFileQuietly(entry.staticPreviewUri)),
+  );
+
+  return entries;
 }

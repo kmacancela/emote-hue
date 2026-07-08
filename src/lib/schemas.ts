@@ -73,6 +73,7 @@ export const hueEntrySchema = z.object({
   createdAt: z.string().min(1),
   title: z.string().optional(),
   privateNote: z.string().optional(),
+  staticPreviewUri: z.string().optional(),
   transcriptSummary: z.string().optional(),
   transcript: z.string().optional(),
   intensity: z.number().min(1).max(10),

@@ -1,3 +1,4 @@
+import type { RefObject } from 'react';
 import { useEffect, useMemo, useState } from 'react';
 import type { StyleProp, ViewStyle } from 'react-native';
 import { StyleSheet } from 'react-native';
@@ -12,11 +13,13 @@ import {
   Blur,
   Canvas,
   Circle,
+  type CanvasRef,
   Group,
   Path,
   LinearGradient as SkiaLinearGradient,
   RadialGradient,
   Rect,
+  useCanvasRef,
   vec,
 } from '@shopify/react-native-skia';
 
@@ -31,6 +34,7 @@ type HueCanvasProps = {
   preview?: boolean;
   reduceMotion?: boolean;
   seedKey?: string;
+  onCanvasRef?: (ref: RefObject<CanvasRef | null>) => void;
   style?: StyleProp<ViewStyle>;
 };
 
@@ -73,8 +77,10 @@ export function HueCanvas({
   preview = false,
   reduceMotion = false,
   seedKey = 'sample',
+  onCanvasRef,
   style,
 }: HueCanvasProps) {
+  const canvasRef = useCanvasRef();
   const safeAnalysis = useMemo(
     () => normalizeHueAnalysis(analysis),
     [analysis],
@@ -124,6 +130,10 @@ export function HueCanvas({
     canvasMax * (safeAnalysis.visual.texture === 'watercolor' ? 0.088 : 0.072);
 
   useEffect(() => {
+    onCanvasRef?.(canvasRef);
+  }, [canvasRef, onCanvasRef]);
+
+  useEffect(() => {
     if (
       !interactive ||
       reduceMotion ||
@@ -158,7 +168,7 @@ export function HueCanvas({
         style,
       ]}
     >
-      <Canvas style={StyleSheet.absoluteFill}>
+      <Canvas ref={canvasRef} style={StyleSheet.absoluteFill}>
         <Rect height={size.height} width={size.width} x={0} y={0}>
           <SkiaLinearGradient
             colors={gradientColors}

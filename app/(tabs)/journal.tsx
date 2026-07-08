@@ -1,13 +1,15 @@
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { FlatList, StyleSheet, View } from 'react-native';
 
 import { BrandText } from '@/src/components/BrandText';
 import { Button } from '@/src/components/Button';
 import { HueCard } from '@/src/components/HueCard';
 import { Screen } from '@/src/components/Screen';
+import { SkyStrip } from '@/src/components/SkyStrip';
 import { useHueEntries } from '@/src/hooks/useHueEntries';
 import { colors, spacing } from '@/src/theme';
+import type { HueEntry } from '@/src/types/hue';
 
 export default function JournalScreen() {
   const router = useRouter();
@@ -19,8 +21,26 @@ export default function JournalScreen() {
     }, [refresh]),
   );
 
-  return (
-    <Screen>
+  const renderEntry = useCallback(
+    ({ item }: { item: HueEntry }) => (
+      <View style={styles.gridItem}>
+        <HueCard
+          entry={item}
+          onPress={() => router.push(`/entry/${item.id}`)}
+        />
+      </View>
+    ),
+    [router],
+  );
+
+  const header = (
+    <View style={styles.headerStack}>
+      {entries.length > 0 ? (
+        <SkyStrip
+          entries={entries}
+          onPressEntry={(id) => router.push(`/entry/${id}`)}
+        />
+      ) : null}
       <View style={styles.header}>
         <BrandText variant="title">Your color language is beginning.</BrandText>
         <BrandText muted>
@@ -28,30 +48,36 @@ export default function JournalScreen() {
           labels.
         </BrandText>
       </View>
+    </View>
+  );
 
-      {entries.length > 0 ? (
-        <View style={styles.grid}>
-          {entries.map((entry) => (
-            <HueCard
-              entry={entry}
-              key={entry.id}
-              onPress={() => router.push(`/entry/${entry.id}`)}
-            />
-          ))}
-        </View>
-      ) : (
-        <View style={styles.empty}>
-          <BrandText variant="lead">
-            {isLoading ? 'Opening your journal...' : 'No Hue Entries yet.'}
-          </BrandText>
-          <BrandText muted>
-            Create your first color portrait to start the gallery.
-          </BrandText>
-          <Button onPress={() => router.push('/create/record')}>
-            Create Hue Entry
-          </Button>
-        </View>
-      )}
+  const emptyState = (
+    <View style={styles.empty}>
+      <BrandText variant="lead">
+        {isLoading ? 'Opening your journal...' : 'No Hue Entries yet.'}
+      </BrandText>
+      <BrandText muted>
+        Create your first color portrait to start the gallery.
+      </BrandText>
+      <Button onPress={() => router.push('/create/record')}>
+        Create Hue Entry
+      </Button>
+    </View>
+  );
+
+  return (
+    <Screen scroll={false}>
+      <FlatList
+        columnWrapperStyle={styles.gridRow}
+        contentContainerStyle={styles.listContent}
+        data={entries}
+        keyExtractor={(entry) => entry.id}
+        ListEmptyComponent={emptyState}
+        ListHeaderComponent={header}
+        numColumns={2}
+        renderItem={renderEntry}
+        showsVerticalScrollIndicator={false}
+      />
     </Screen>
   );
 }
@@ -61,13 +87,23 @@ const styles = StyleSheet.create({
     backgroundColor: colors.transparent,
     gap: spacing.md,
   },
-  grid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
+  gridItem: {
+    flex: 1,
+    minWidth: 0,
+  },
+  gridRow: {
     gap: spacing.md,
   },
   header: {
     backgroundColor: colors.transparent,
     gap: spacing.sm,
+  },
+  headerStack: {
+    backgroundColor: colors.transparent,
+    gap: spacing.lg,
+  },
+  listContent: {
+    gap: spacing.lg,
+    paddingBottom: spacing.lg,
   },
 });

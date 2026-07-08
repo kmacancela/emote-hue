@@ -1,4 +1,5 @@
-import { useEffect, useMemo } from 'react';
+import type { RefObject } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import type {
   ColorValue,
   DimensionValue,
@@ -6,6 +7,7 @@ import type {
   ViewStyle,
 } from 'react-native';
 import { StyleSheet, View } from 'react-native';
+import type { CanvasRef } from '@shopify/react-native-skia';
 import { LinearGradient } from 'expo-linear-gradient';
 import Animated, {
   interpolate,
@@ -26,6 +28,7 @@ type HueCanvasProps = {
   preview?: boolean;
   reduceMotion?: boolean;
   seedKey?: string;
+  onCanvasRef?: (ref: RefObject<CanvasRef | null>) => void;
   style?: StyleProp<ViewStyle>;
 };
 
@@ -71,8 +74,10 @@ export function HueCanvas({
   preview = false,
   reduceMotion = false,
   seedKey = 'sample',
+  onCanvasRef,
   style,
 }: HueCanvasProps) {
+  const canvasRef = useRef<CanvasRef | null>(null);
   const safeAnalysis = useMemo(
     () => normalizeHueAnalysis(analysis),
     [analysis],
@@ -114,6 +119,10 @@ export function HueCanvas({
   const particles = geometry.particles.slice(0, particleLimit);
   const grain = preview ? [] : (geometry.grain ?? []);
   const blur = 18 + safeAnalysis.visual.edgeSoftness * 22;
+
+  useEffect(() => {
+    onCanvasRef?.(canvasRef);
+  }, [onCanvasRef]);
 
   useEffect(() => {
     if (

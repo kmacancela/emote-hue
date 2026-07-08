@@ -1,6 +1,8 @@
-import { useEffect, useState } from 'react';
+import type { RefObject } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { StyleSheet, TextInput, View } from 'react-native';
+import type { CanvasRef } from '@shopify/react-native-skia';
 
 import { BrandText } from '@/src/components/BrandText';
 import { Button } from '@/src/components/Button';
@@ -12,6 +14,7 @@ import { useHueEntries } from '@/src/hooks/useHueEntries';
 import { useOnboarding } from '@/src/hooks/useOnboarding';
 import { clearCreateDraft, loadCreateDraft } from '@/src/lib/createDraft';
 import { gentleSuccess } from '@/src/lib/haptics';
+import { capturePortraitSnapshot } from '@/src/lib/portraitSnapshot';
 import { readSaveTranscripts } from '@/src/lib/settings';
 import type { CreateDraft } from '@/src/types/hue';
 import { colors, radius, spacing, typography } from '@/src/theme';
@@ -27,6 +30,7 @@ export default function SaveScreen() {
   const [draft, setDraft] = useState<CreateDraft | null>(null);
   const [title, setTitle] = useState('');
   const [privateNote, setPrivateNote] = useState('');
+  const canvasRef = useRef<RefObject<CanvasRef | null> | null>(null);
   const isFirstEntry = params.first === '1';
 
   useEffect(() => {
@@ -46,10 +50,12 @@ export default function SaveScreen() {
       !reflection.startsWith(VOICE_REFLECTION_PLACEHOLDER_PREFIX)
         ? reflection
         : undefined;
+    const staticPreviewUri = await capturePortraitSnapshot(canvasRef.current);
 
     await saveEntry({
       analysis: draft.analysis,
       privateNote,
+      staticPreviewUri,
       title,
       transcript,
       transcriptSummary:
@@ -96,6 +102,9 @@ export default function SaveScreen() {
       </View>
       <HueCanvas
         analysis={draft.analysis}
+        onCanvasRef={(ref) => {
+          canvasRef.current = ref;
+        }}
         reduceMotion
         seedKey={draft.startedAt}
       />
