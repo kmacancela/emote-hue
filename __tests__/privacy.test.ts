@@ -1,6 +1,17 @@
+import type { ShareCardEntry } from '@/src/components/ShareCard';
 import { buildShareCardPayload } from '@/src/lib/privacy';
 import { sampleHueAnalysis } from '@/src/lib/mockHue';
 import type { HueEntry } from '@/src/types/hue';
+
+type NoPrivateShareCardEntryKeys =
+  Extract<
+    keyof ShareCardEntry,
+    'privateNote' | 'transcript' | 'transcriptSummary'
+  > extends never
+    ? true
+    : false;
+
+const shareCardEntryHasNoPrivateKeys: NoPrivateShareCardEntryKeys = true;
 
 const entry: HueEntry = {
   id: 'entry-1',
@@ -11,20 +22,30 @@ const entry: HueEntry = {
   primaryEmotion: sampleHueAnalysis.primaryEmotion,
   privateNote: 'private note',
   transcript: 'raw words',
+  transcriptSummary: 'summary',
 };
 
 describe('share card payload', () => {
-  it('excludes private text by default', () => {
+  it('strips private text fields', () => {
     const payload = buildShareCardPayload(entry);
 
-    expect(payload.privateNote).toBeUndefined();
-    expect(payload.transcript).toBeUndefined();
+    expect(payload).not.toHaveProperty('privateNote');
+    expect(payload).not.toHaveProperty('transcript');
+    expect(payload).not.toHaveProperty('transcriptSummary');
   });
 
-  it('includes private text only when explicitly requested', () => {
-    const payload = buildShareCardPayload(entry, true);
+  it('matches the narrow ShareCard entry contract', () => {
+    const payload: ShareCardEntry = buildShareCardPayload(entry);
 
-    expect(payload.privateNote).toBe('private note');
-    expect(payload.transcript).toBe('raw words');
+    expect(shareCardEntryHasNoPrivateKeys).toBe(true);
+    expect(payload).toEqual({
+      createdAt: entry.createdAt,
+      emotionWords: entry.emotionWords,
+      id: entry.id,
+      intensity: entry.intensity,
+      palette: entry.analysis.palette,
+      primaryEmotion: entry.primaryEmotion,
+      visual: entry.analysis.visual,
+    });
   });
 });

@@ -1,7 +1,8 @@
 import type { RefObject } from 'react';
 import { useEffect, useRef, useState } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { StyleSheet, TextInput, View } from 'react-native';
+import { Feather } from '@expo/vector-icons';
+import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import type { CanvasRef } from '@shopify/react-native-skia';
 
 import { AdjustChip } from '@/src/components/AdjustChip';
@@ -11,6 +12,7 @@ import { EmotionChips } from '@/src/components/EmotionChips';
 import { FlowHeader } from '@/src/components/FlowHeader';
 import { HueCanvas } from '@/src/components/HueCanvas';
 import { IntensityMeter } from '@/src/components/IntensityMeter';
+import { PaletteSwatchRow } from '@/src/components/PaletteSwatchRow';
 import { PrivacyNotice } from '@/src/components/PrivacyNotice';
 import { Screen } from '@/src/components/Screen';
 import { SupportNotice } from '@/src/components/SupportNotice';
@@ -27,11 +29,18 @@ import {
 } from '@/src/lib/createDraft';
 import { gentleSuccess } from '@/src/lib/haptics';
 import { applyIntensity } from '@/src/lib/mockHue';
+import { curatedPalettes } from '@/src/lib/palettes';
+import type { CuratedPalette } from '@/src/lib/palettes';
 import { capturePortraitSnapshot } from '@/src/lib/portraitSnapshot';
 import { readSaveTranscripts } from '@/src/lib/settings';
-import type { CreateDraft, HueAdjustment, HueAnalysis } from '@/src/types/hue';
+import type {
+  CreateDraft,
+  HueAdjustment,
+  HueAnalysis,
+  HuePaletteColor,
+} from '@/src/types/hue';
 import { colors, radius, spacing, typography } from '@/src/theme';
-import { applyHueAdjustment } from '@/src/utils/color';
+import { applyHueAdjustment, normalizeHueAnalysis } from '@/src/utils/color';
 
 const VOICE_REFLECTION_PLACEHOLDER_PREFIX =
   'A private voice reflection was recorded';
@@ -57,6 +66,13 @@ export default function PortraitScreen() {
   const [intensity, setIntensity] = useState(5);
   const [privateNote, setPrivateNote] = useState('');
   const [title, setTitle] = useState('');
+  const [isPaletteLibraryOpen, setIsPaletteLibraryOpen] = useState(false);
+  const [originalAnalyzedPalette, setOriginalAnalyzedPalette] = useState<
+    HuePaletteColor[] | null
+  >(null);
+  const [selectedPaletteId, setSelectedPaletteId] = useState<string | null>(
+    null,
+  );
   const canvasRef = useRef<RefObject<CanvasRef | null> | null>(null);
   const isFirstEntry = params.first === '1';
 
@@ -140,6 +156,35 @@ export default function PortraitScreen() {
   function adjustPortrait(adjustment: HueAdjustment) {
     setAnalysis((current) =>
       current ? applyHueAdjustment(current, adjustment) : current,
+    );
+  }
+
+  function selectCuratedPalette(palette: CuratedPalette) {
+    if (!analysis) {
+      return;
+    }
+
+    setOriginalAnalyzedPalette((current) => current ?? analysis.palette);
+    setSelectedPaletteId(palette.id);
+    setAnalysis(
+      normalizeHueAnalysis({
+        ...analysis,
+        palette: palette.colors,
+      }),
+    );
+  }
+
+  function restoreOriginalPalette() {
+    if (!analysis || !originalAnalyzedPalette) {
+      return;
+    }
+
+    setSelectedPaletteId(null);
+    setAnalysis(
+      normalizeHueAnalysis({
+        ...analysis,
+        palette: originalAnalyzedPalette,
+      }),
     );
   }
 
@@ -243,6 +288,47 @@ export default function PortraitScreen() {
             ))}
           </View>
           <EmotionChips labels={analysis.emotionWords} />
+          <View style={styles.paletteLibrary}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityState={{ expanded: isPaletteLibraryOpen }}
+              onPress={() => setIsPaletteLibraryOpen((current) => !current)}
+              style={({ pressed }) => [
+                styles.paletteLibraryHeader,
+                pressed && styles.pressed,
+              ]}
+            >
+              <BrandText variant="small">Choose a different palette</BrandText>
+              <Feather
+                color={colors.mistMuted}
+                name={isPaletteLibraryOpen ? 'chevron-up' : 'chevron-down'}
+                size={18}
+              />
+            </Pressable>
+            {isPaletteLibraryOpen ? (
+              <View style={styles.paletteLibraryContent}>
+                <PaletteSwatchRow
+                  onSelect={selectCuratedPalette}
+                  palettes={curatedPalettes}
+                  selectedPaletteId={selectedPaletteId}
+                />
+                {originalAnalyzedPalette && selectedPaletteId ? (
+                  <Pressable
+                    accessibilityRole="button"
+                    onPress={restoreOriginalPalette}
+                    style={({ pressed }) => [
+                      styles.backToColorsChip,
+                      pressed && styles.pressed,
+                    ]}
+                  >
+                    <Text style={styles.backToColorsLabel}>
+                      Back to my colors
+                    </Text>
+                  </Pressable>
+                ) : null}
+              </View>
+            ) : null}
+          </View>
           <View style={styles.saveSection}>
             <BrandText variant="lead">
               {isFirstEntry
@@ -319,6 +405,45 @@ const styles = StyleSheet.create({
   },
   note: {
     minHeight: 112,
+  },
+  backToColorsChip: {
+    alignSelf: 'flex-start',
+    backgroundColor: colors.transparent,
+    borderColor: colors.lineStrong,
+    borderRadius: radius.pill,
+    borderWidth: StyleSheet.hairlineWidth,
+    minHeight: 38,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+  },
+  backToColorsLabel: {
+    color: colors.mist,
+    fontSize: typography.size.small,
+    fontWeight: typography.weight.medium,
+    lineHeight: typography.lineHeight.small,
+  },
+  paletteLibrary: {
+    backgroundColor: colors.transparent,
+    gap: spacing.sm,
+  },
+  paletteLibraryContent: {
+    backgroundColor: colors.transparent,
+    gap: spacing.sm,
+  },
+  paletteLibraryHeader: {
+    alignItems: 'center',
+    backgroundColor: colors.inkSoft,
+    borderColor: colors.line,
+    borderRadius: radius.sm,
+    borderWidth: StyleSheet.hairlineWidth,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    minHeight: 46,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+  },
+  pressed: {
+    opacity: 0.78,
   },
   saveSection: {
     backgroundColor: colors.transparent,
