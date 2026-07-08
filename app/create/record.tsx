@@ -7,10 +7,21 @@ import { Button } from '@/src/components/Button';
 import { MicOrb } from '@/src/components/MicOrb';
 import { PrivacyNotice } from '@/src/components/PrivacyNotice';
 import { Screen } from '@/src/components/Screen';
-import { useAudioRecorder } from '@/src/hooks/useAudioRecorder';
+import {
+  maxDurationMillis,
+  useAudioRecorder,
+} from '@/src/hooks/useAudioRecorder';
 import { useReducedMotion } from '@/src/hooks/useReducedMotion';
 import { startCreateDraft } from '@/src/lib/createDraft';
 import { colors, radius, spacing, typography } from '@/src/theme';
+
+function formatElapsedTime(durationMillis: number) {
+  const totalSeconds = Math.floor(durationMillis / 1000);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+
+  return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+}
 
 export default function RecordScreen() {
   const router = useRouter();
@@ -20,6 +31,10 @@ export default function RecordScreen() {
   const reduceMotion = useReducedMotion();
   const canContinue =
     reflection.trim().length > 0 || Boolean(recorder.recordingUri);
+  const remainingSeconds = Math.ceil(
+    Math.max(0, maxDurationMillis - recorder.durationMillis) / 1000,
+  );
+  const showRecordingWarning = recorder.isRecording && remainingSeconds <= 10;
 
   async function handleMicPress() {
     if (recorder.isRecording) {
@@ -51,12 +66,26 @@ export default function RecordScreen() {
       </View>
 
       {!textOnly ? (
-        <MicOrb
-          metering={recorder.metering}
-          onPress={handleMicPress}
-          reduceMotion={reduceMotion}
-          state={recorder.uiState}
-        />
+        <View style={styles.micStack}>
+          <MicOrb
+            metering={recorder.metering}
+            onPress={handleMicPress}
+            reduceMotion={reduceMotion}
+            state={recorder.uiState}
+          />
+          {recorder.isRecording ? (
+            <View style={styles.recordingMeta}>
+              <BrandText muted variant="small">
+                {formatElapsedTime(recorder.durationMillis)}
+              </BrandText>
+              {showRecordingWarning ? (
+                <BrandText style={styles.recordingWarning} variant="small">
+                  Wrapping up soon — {remainingSeconds}s left.
+                </BrandText>
+              ) : null}
+            </View>
+          ) : null}
+        </View>
       ) : null}
 
       {recorder.error ? (
@@ -108,6 +137,19 @@ const styles = StyleSheet.create({
     lineHeight: typography.lineHeight.body,
     minHeight: 144,
     padding: spacing.md,
+  },
+  micStack: {
+    alignItems: 'center',
+    backgroundColor: colors.transparent,
+    gap: spacing.xs,
+  },
+  recordingMeta: {
+    alignItems: 'center',
+    backgroundColor: colors.transparent,
+    gap: spacing.xs,
+  },
+  recordingWarning: {
+    color: colors.amber,
   },
   stack: {
     backgroundColor: colors.transparent,

@@ -8,24 +8,22 @@ import { PrivacyNotice } from '@/src/components/PrivacyNotice';
 import { Screen } from '@/src/components/Screen';
 import { useHueEntries } from '@/src/hooks/useHueEntries';
 import { useOnboarding } from '@/src/hooks/useOnboarding';
-import { readJson, writeJson } from '@/src/lib/storage';
+import { readSaveTranscripts, writeSaveTranscripts } from '@/src/lib/settings';
 import { colors, radius, spacing } from '@/src/theme';
-
-const TRANSCRIPT_KEY = '@emote-hue/privacy-save-transcripts';
 
 export default function SettingsScreen() {
   const router = useRouter();
   const { deleteAllEntries } = useHueEntries();
   const { resetOnboarding } = useOnboarding();
-  const [saveTranscripts, setSaveTranscripts] = useState(false);
+  const [saveTranscripts, setSaveTranscripts] = useState(true);
 
   useEffect(() => {
-    readJson<boolean>(TRANSCRIPT_KEY, false).then(setSaveTranscripts);
+    readSaveTranscripts().then(setSaveTranscripts);
   }, []);
 
   async function updateTranscriptSetting(value: boolean) {
     setSaveTranscripts(value);
-    await writeJson(TRANSCRIPT_KEY, value);
+    await writeSaveTranscripts(value);
   }
 
   function confirmDeleteEntries() {
@@ -62,7 +60,8 @@ export default function SettingsScreen() {
         <View style={styles.rowCopy}>
           <BrandText>Save typed transcripts</BrandText>
           <BrandText muted variant="small">
-            Default is off. The current save flow stores only a short summary.
+            Default is on. Your reflection text is stored privately with each
+            entry.
           </BrandText>
         </View>
         <Switch

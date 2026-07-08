@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   RecordingPresets,
   requestRecordingPermissionsAsync,
@@ -7,6 +7,8 @@ import {
   useAudioRecorderState,
 } from 'expo-audio';
 
+import { deleteRecordingFile } from '@/src/lib/recordingFiles';
+
 export type RecorderUiState =
   | 'idle'
   | 'requesting_permission'
@@ -14,9 +16,12 @@ export type RecorderUiState =
   | 'processing'
   | 'error';
 
+export const maxDurationMillis = 45000;
+
 export function useAudioRecorder() {
   const recorder = useExpoAudioRecorder(RecordingPresets.LOW_QUALITY);
   const recorderState = useAudioRecorderState(recorder, 250);
+  const hasObservedRecording = useRef(false);
   const [uiState, setUiState] = useState<RecorderUiState>('idle');
   const [error, setError] = useState<string | null>(null);
   const [recordingUri, setRecordingUri] = useState<string | undefined>();
@@ -38,7 +43,43 @@ export function useAudioRecorder() {
     return true;
   }, []);
 
+  const finalizeRecording = useCallback(() => {
+    const uri = recorder.uri ?? recorder.getStatus().url ?? undefined;
+
+    setRecordingUri(uri);
+    setUiState('idle');
+    return uri;
+  }, [recorder]);
+
+  useEffect(() => {
+    if (recorderState.isRecording) {
+      hasObservedRecording.current = true;
+      return;
+    }
+
+    if (uiState !== 'recording' || !hasObservedRecording.current) {
+      return;
+    }
+
+    hasObservedRecording.current = false;
+
+    queueMicrotask(() => {
+      try {
+        finalizeRecording();
+      } catch {
+        setUiState('error');
+        setError(
+          'Recording did not save. You can try again or type your feeling instead.',
+        );
+      }
+    });
+  }, [finalizeRecording, recorderState.isRecording, uiState]);
+
   const startRecording = useCallback(async () => {
+    await deleteRecordingFile(recordingUri);
+    hasObservedRecording.current = false;
+    setRecordingUri(undefined);
+
     const hasPermission = await requestPermission();
 
     if (!hasPermission) {
@@ -51,8 +92,7 @@ export function useAudioRecorder() {
         playsInSilentMode: true,
       });
       await recorder.prepareToRecordAsync({ isMeteringEnabled: true });
-      recorder.record({ forDuration: 45 });
-      setRecordingUri(undefined);
+      recorder.record({ forDuration: maxDurationMillis / 1000 });
       setUiState('recording');
       return true;
     } catch {
@@ -62,16 +102,14 @@ export function useAudioRecorder() {
       );
       return false;
     }
-  }, [recorder, requestPermission]);
+  }, [recorder, recordingUri, requestPermission]);
 
   const stopRecording = useCallback(async () => {
     try {
       setUiState('processing');
       await recorder.stop();
-      const uri = recorder.uri ?? recorder.getStatus().url ?? undefined;
-      setRecordingUri(uri);
-      setUiState('idle');
-      return uri;
+      hasObservedRecording.current = false;
+      return finalizeRecording();
     } catch {
       setUiState('error');
       setError(
@@ -79,7 +117,7 @@ export function useAudioRecorder() {
       );
       return undefined;
     }
-  }, [recorder]);
+  }, [finalizeRecording, recorder]);
 
   const resetRecording = useCallback(() => {
     setRecordingUri(undefined);

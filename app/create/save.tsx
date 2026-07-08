@@ -11,8 +11,12 @@ import { useHueEntries } from '@/src/hooks/useHueEntries';
 import { useOnboarding } from '@/src/hooks/useOnboarding';
 import { clearCreateDraft, loadCreateDraft } from '@/src/lib/createDraft';
 import { gentleSuccess } from '@/src/lib/haptics';
+import { readSaveTranscripts } from '@/src/lib/settings';
 import type { CreateDraft } from '@/src/types/hue';
 import { colors, radius, spacing, typography } from '@/src/theme';
+
+const VOICE_REFLECTION_PLACEHOLDER_PREFIX =
+  'A private voice reflection was recorded';
 
 export default function SaveScreen() {
   const router = useRouter();
@@ -33,10 +37,20 @@ export default function SaveScreen() {
       return;
     }
 
+    const saveTranscripts = await readSaveTranscripts();
+    const reflection = draft.reflection.trim();
+    const transcript =
+      saveTranscripts &&
+      reflection.length > 0 &&
+      !reflection.startsWith(VOICE_REFLECTION_PLACEHOLDER_PREFIX)
+        ? reflection
+        : undefined;
+
     await saveEntry({
       analysis: draft.analysis,
       privateNote,
       title,
+      transcript,
       transcriptSummary:
         draft.mode === 'voice'
           ? 'Voice reflection translated without saving raw audio.'
