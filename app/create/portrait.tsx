@@ -79,8 +79,9 @@ export default function PortraitScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ first?: string }>();
   const reduceMotion = useReducedMotion();
-  const { calibrations } = useColorCalibration();
-  const { analyzeReflection, error, isAnalyzing } = useHueAnalysis();
+  const { calibrations, isLoading: isCalibrationLoading } =
+    useColorCalibration();
+  const { analyzeReflection, error } = useHueAnalysis();
   const { completeOnboarding } = useOnboarding();
   const { entries, isLoading, saveEntry } = useHueEntries();
   const [draft, setDraft] = useState<CreateDraft | null>(null);
@@ -101,8 +102,10 @@ export default function PortraitScreen() {
   const scrollRef = useRef<ScrollView | null>(null);
   const saveSectionRef = useRef<View | null>(null);
   const finaleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const analysisRequestIdRef = useRef(0);
   const tiltIntensityRef = useRef(intensity);
   const intensityValueRef = useRef(intensity);
+  const [analysisAttempt, setAnalysisAttempt] = useState(0);
   const isFirstEntry = params.first === '1';
   const riverState = useMemo(() => computeRiverState(entries), [entries]);
   const unlockedPaletteIds = useMemo(
@@ -158,15 +161,16 @@ export default function PortraitScreen() {
   }, []);
 
   useEffect(() => {
-    if (!draft || analysis || isAnalyzing) {
+    if (!draft || analysis || isCalibrationLoading) {
       return;
     }
 
-    let isCancelled = false;
+    const requestId = analysisRequestIdRef.current + 1;
+    analysisRequestIdRef.current = requestId;
 
     analyzeReflection(draft.reflection, intensity, calibrations).then(
       (result) => {
-        if (isCancelled || !result) {
+        if (analysisRequestIdRef.current !== requestId || !result) {
           return;
         }
 
@@ -176,15 +180,18 @@ export default function PortraitScreen() {
     );
 
     return () => {
-      isCancelled = true;
+      if (analysisRequestIdRef.current === requestId) {
+        analysisRequestIdRef.current += 1;
+      }
     };
   }, [
+    analysisAttempt,
     analysis,
     analyzeReflection,
     calibrations,
     draft,
     intensity,
-    isAnalyzing,
+    isCalibrationLoading,
   ]);
 
   useEffect(() => {
@@ -387,6 +394,20 @@ export default function PortraitScreen() {
     router.replace('/create/record');
   }
 
+  function returnToReflection() {
+    if (router.canGoBack()) {
+      router.back();
+      return;
+    }
+
+    router.replace('/create/record');
+  }
+
+  function retryAnalysis() {
+    analysisRequestIdRef.current += 1;
+    setAnalysisAttempt((current) => current + 1);
+  }
+
   async function savePrivately() {
     if (!draft || !analysis || isLoading) {
       return;
@@ -578,11 +599,25 @@ export default function PortraitScreen() {
           </View>
         </>
       ) : (
-        <View style={styles.stack}>
+        <View style={styles.loadingStack}>
           <BrandText variant="lead">
-            Translating your reflection into color...
+            {isCalibrationLoading
+              ? 'Gathering your color choices...'
+              : 'Translating your reflection into color...'}
+          </BrandText>
+          <BrandText muted>
+            A portrait should appear in a moment. You can go back if you want
+            to change your words.
           </BrandText>
           {error ? <BrandText style={styles.error}>{error}</BrandText> : null}
+          {error ? (
+            <Button onPress={retryAnalysis} variant="secondary">
+              Try again
+            </Button>
+          ) : null}
+          <Button onPress={returnToReflection} variant="ghost">
+            Back to reflection
+          </Button>
         </View>
       )}
     </Screen>
@@ -614,6 +649,10 @@ const styles = StyleSheet.create({
     lineHeight: typography.lineHeight.body,
     minHeight: 52,
     padding: spacing.md,
+  },
+  loadingStack: {
+    backgroundColor: colors.transparent,
+    gap: spacing.md,
   },
   note: {
     minHeight: 112,
