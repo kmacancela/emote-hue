@@ -94,7 +94,11 @@ export default function SaveScreen() {
           <BrandText muted>Your color language keeps growing.</BrandText>
         ) : null}
       </View>
-      <HueCanvas analysis={draft.analysis} reduceMotion />
+      <HueCanvas
+        analysis={draft.analysis}
+        reduceMotion
+        seedKey={draft.startedAt}
+      />
       <TextInput
         accessibilityLabel="Entry title"
         onChangeText={setTitle}

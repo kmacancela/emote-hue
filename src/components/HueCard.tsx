@@ -24,6 +24,7 @@ export function HueCard({ entry, onPress }: HueCardProps) {
         interactive={false}
         preview
         reduceMotion
+        seedKey={entry.id}
         style={styles.art}
       />
       <View style={styles.meta}>

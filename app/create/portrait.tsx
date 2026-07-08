@@ -92,7 +92,11 @@ export default function PortraitScreen() {
 
       {analysis ? (
         <>
-          <HueCanvas analysis={analysis} reduceMotion={reduceMotion} />
+          <HueCanvas
+            analysis={analysis}
+            reduceMotion={reduceMotion}
+            seedKey={draft.startedAt}
+          />
           {analysis.safetyFlags.crisisLanguage ||
           analysis.safetyFlags.selfHarmLanguage ? (
             <SupportNotice />

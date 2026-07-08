@@ -170,7 +170,11 @@ export default function HomeScreen() {
         </View>
 
         <View style={styles.canvasColumn}>
-          <HueCanvas analysis={activeAnalysis} reduceMotion={reduceMotion} />
+          <HueCanvas
+            analysis={activeAnalysis}
+            reduceMotion={reduceMotion}
+            seedKey={latestEntry?.id ?? 'sample'}
+          />
           <PrivacyNotice>
             Entries are private by default. The current MVP stores saved entries
             locally on this device.

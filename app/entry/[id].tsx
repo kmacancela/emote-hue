@@ -74,7 +74,7 @@ export default function EntryDetailScreen() {
         <BrandText muted>{entry.analysis.userFacingSummary}</BrandText>
       </View>
 
-      <HueCanvas analysis={entry.analysis} />
+      <HueCanvas analysis={entry.analysis} seedKey={entry.id} />
       <EmotionChips labels={entry.emotionWords} />
 
       {entry.privateNote ? (
