@@ -1,7 +1,8 @@
-import type { PropsWithChildren } from 'react';
+import { useMemo, type PropsWithChildren } from 'react';
 import type { TextProps } from 'react-native';
 import { StyleSheet, Text } from 'react-native';
 
+import { useTypeScale } from '@/src/hooks/useTypeScale';
 import { colors, typography } from '@/src/theme';
 
 type BrandTextProps = PropsWithChildren<
@@ -18,10 +19,25 @@ export function BrandText({
   variant = 'body',
   ...props
 }: BrandTextProps) {
+  const { scaleFactor } = useTypeScale();
+  const scaledType = useMemo(
+    () => ({
+      fontSize: typography.size[variant] * scaleFactor,
+      lineHeight: typography.lineHeight[variant] * scaleFactor,
+    }),
+    [scaleFactor, variant],
+  );
+
   return (
     <Text
       {...props}
-      style={[styles.base, styles[variant], muted && styles.muted, style]}
+      style={[
+        styles.base,
+        styles[variant],
+        scaledType,
+        muted && styles.muted,
+        style,
+      ]}
     >
       {children}
     </Text>

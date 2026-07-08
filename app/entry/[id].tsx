@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, StyleSheet, View } from 'react-native';
+import { Alert, Pressable, StyleSheet, View } from 'react-native';
+import { Feather } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 
 import { BrandText } from '@/src/components/BrandText';
@@ -11,6 +12,7 @@ import { Screen } from '@/src/components/Screen';
 import { ShareCard } from '@/src/components/ShareCard';
 import type { ShareCardFormat } from '@/src/components/ShareCard';
 import { useHueEntries } from '@/src/hooks/useHueEntries';
+import { useReadback } from '@/src/hooks/useReadback';
 import { useReducedMotion } from '@/src/hooks/useReducedMotion';
 import { buildShareCardPayload } from '@/src/lib/privacy';
 import { shareEntryCard } from '@/src/lib/shareCard';
@@ -31,6 +33,7 @@ export default function EntryDetailScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ id: string }>();
   const { deleteEntry, entries, refresh } = useHueEntries();
+  const { isSpeaking, speak, stop } = useReadback();
   const reduceMotion = useReducedMotion();
   const shareCardRef = useRef<View | null>(null);
   const [isPreparingShare, setIsPreparingShare] = useState(false);
@@ -151,6 +154,41 @@ export default function EntryDetailScreen() {
         </View>
       ) : null}
 
+      {entry.transcript ? (
+        <View style={styles.note}>
+          <View style={styles.noteHeader}>
+            <BrandText muted variant="small">
+              Transcript
+            </BrandText>
+            <Pressable
+              accessibilityLabel={
+                isSpeaking ? 'Stop transcript read-back' : 'Play transcript'
+              }
+              accessibilityRole="button"
+              onPress={() => {
+                if (isSpeaking) {
+                  stop();
+                  return;
+                }
+
+                speak(entry.transcript ?? '');
+              }}
+              style={({ pressed }) => [
+                styles.readbackButton,
+                pressed && styles.pressed,
+              ]}
+            >
+              <Feather
+                color={colors.mist}
+                name={isSpeaking ? 'square' : 'volume-2'}
+                size={15}
+              />
+            </Pressable>
+          </View>
+          <BrandText>{entry.transcript}</BrandText>
+        </View>
+      ) : null}
+
       <View style={styles.palette}>
         {entry.analysis.palette.map((color) => (
           <View key={`${color.hex}-${color.role}`} style={styles.paletteRow}>
@@ -225,6 +263,12 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
     padding: spacing.md,
   },
+  noteHeader: {
+    alignItems: 'center',
+    backgroundColor: colors.transparent,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
   palette: {
     gap: spacing.sm,
   },
@@ -233,6 +277,19 @@ const styles = StyleSheet.create({
     backgroundColor: colors.transparent,
     flexDirection: 'row',
     gap: spacing.sm,
+  },
+  pressed: {
+    opacity: 0.78,
+  },
+  readbackButton: {
+    alignItems: 'center',
+    backgroundColor: colors.inkRaised,
+    borderColor: colors.lineStrong,
+    borderRadius: radius.pill,
+    borderWidth: StyleSheet.hairlineWidth,
+    height: 34,
+    justifyContent: 'center',
+    width: 34,
   },
   swatch: {
     borderRadius: radius.pill,

@@ -1,5 +1,5 @@
 import { useFocusEffect, useRouter } from 'expo-router';
-import { useCallback } from 'react';
+import { useCallback, useMemo } from 'react';
 import { FlatList, StyleSheet, View } from 'react-native';
 
 import { BrandText } from '@/src/components/BrandText';
@@ -8,12 +8,14 @@ import { HueCard } from '@/src/components/HueCard';
 import { Screen } from '@/src/components/Screen';
 import { SkyStrip } from '@/src/components/SkyStrip';
 import { useHueEntries } from '@/src/hooks/useHueEntries';
+import { computeRiverState } from '@/src/lib/colorRiver';
 import { colors, spacing } from '@/src/theme';
 import type { HueEntry } from '@/src/types/hue';
 
 export default function JournalScreen() {
   const router = useRouter();
   const { entries, isLoading, refresh } = useHueEntries();
+  const riverState = useMemo(() => computeRiverState(entries), [entries]);
 
   useFocusEffect(
     useCallback(() => {
@@ -36,10 +38,17 @@ export default function JournalScreen() {
   const header = (
     <View style={styles.headerStack}>
       {entries.length > 0 ? (
-        <SkyStrip
-          entries={entries}
-          onPressEntry={(id) => router.push(`/entry/${id}`)}
-        />
+        <>
+          <SkyStrip
+            entries={entries}
+            onPressEntry={(id) => router.push(`/entry/${id}`)}
+          />
+          {riverState.flowDays > 0 ? (
+            <BrandText muted style={styles.riverLine} variant="small">
+              Color River: {riverState.flowDays} days flowing this month.
+            </BrandText>
+          ) : null}
+        </>
       ) : null}
       <View style={styles.header}>
         <BrandText variant="title">Your color language is beginning.</BrandText>
@@ -105,5 +114,9 @@ const styles = StyleSheet.create({
   listContent: {
     gap: spacing.lg,
     paddingBottom: spacing.lg,
+  },
+  riverLine: {
+    marginTop: -spacing.md,
+    textAlign: 'center',
   },
 });

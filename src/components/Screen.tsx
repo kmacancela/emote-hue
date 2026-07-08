@@ -1,4 +1,4 @@
-import type { PropsWithChildren } from 'react';
+import type { PropsWithChildren, RefObject } from 'react';
 import {
   KeyboardAvoidingView,
   Platform,
@@ -16,6 +16,7 @@ type ScreenProps = PropsWithChildren<{
   scroll?: boolean;
   center?: boolean;
   padded?: boolean;
+  scrollRef?: RefObject<ScrollView | null>;
 }>;
 
 export function Screen({
@@ -23,6 +24,7 @@ export function Screen({
   children,
   padded = true,
   scroll = true,
+  scrollRef,
 }: ScreenProps) {
   const { width } = useWindowDimensions();
   const isTablet = width >= breakpoints.tablet;
@@ -44,6 +46,7 @@ export function Screen({
             <ScrollView
               contentContainerStyle={contentStyle}
               keyboardShouldPersistTaps="handled"
+              ref={scrollRef}
               showsVerticalScrollIndicator={false}
             >
               {children}

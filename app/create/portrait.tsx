@@ -1,8 +1,16 @@
 import type { RefObject } from 'react';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import {
+  findNodeHandle,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
 import type { CanvasRef } from '@shopify/react-native-skia';
 
 import { AdjustChip } from '@/src/components/AdjustChip';
@@ -13,21 +21,28 @@ import { FlowHeader } from '@/src/components/FlowHeader';
 import { HueCanvas } from '@/src/components/HueCanvas';
 import { IntensityMeter } from '@/src/components/IntensityMeter';
 import { PaletteSwatchRow } from '@/src/components/PaletteSwatchRow';
+import { PinchToFinish } from '@/src/components/PinchToFinish';
 import { PrivacyNotice } from '@/src/components/PrivacyNotice';
 import { Screen } from '@/src/components/Screen';
 import { SupportNotice } from '@/src/components/SupportNotice';
+import {
+  TiltModeControls,
+  type TiltMode,
+} from '@/src/components/TiltModeControls';
 import { useColorCalibration } from '@/src/hooks/useColorCalibration';
 import { useHueAnalysis } from '@/src/hooks/useHueAnalysis';
 import { useHueEntries } from '@/src/hooks/useHueEntries';
 import { useOnboarding } from '@/src/hooks/useOnboarding';
 import { useReducedMotion } from '@/src/hooks/useReducedMotion';
+import { useTiltControl } from '@/src/hooks/useTiltControl';
 import {
   clearCreateDraft,
   loadCreateDraft,
   updateDraftAnalysis,
   updateDraftIntensity,
 } from '@/src/lib/createDraft';
-import { gentleSuccess } from '@/src/lib/haptics';
+import { computeRiverState, getPaletteUnlockDay } from '@/src/lib/colorRiver';
+import { gentleSelection, gentleSuccess } from '@/src/lib/haptics';
 import { applyIntensity } from '@/src/lib/mockHue';
 import { curatedPalettes } from '@/src/lib/palettes';
 import type { CuratedPalette } from '@/src/lib/palettes';
@@ -44,6 +59,9 @@ import { applyHueAdjustment, normalizeHueAnalysis } from '@/src/utils/color';
 
 const VOICE_REFLECTION_PLACEHOLDER_PREFIX =
   'A private voice reflection was recorded';
+const FINALE_BOOST_MS = 1800;
+const TILT_INTENSITY_STEP = 0.35;
+const TILT_VISUAL_STEP = 0.025;
 
 const adjustmentControls = [
   { icon: 'feather', label: 'Softer', value: 'softer' },
@@ -53,6 +71,10 @@ const adjustmentControls = [
   { icon: 'activity', label: 'More alive', value: 'more_alive' },
 ] as const;
 
+function clamp(value: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, value));
+}
+
 export default function PortraitScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ first?: string }>();
@@ -60,10 +82,11 @@ export default function PortraitScreen() {
   const { calibrations } = useColorCalibration();
   const { analyzeReflection, error, isAnalyzing } = useHueAnalysis();
   const { completeOnboarding } = useOnboarding();
-  const { isLoading, saveEntry } = useHueEntries();
+  const { entries, isLoading, saveEntry } = useHueEntries();
   const [draft, setDraft] = useState<CreateDraft | null>(null);
   const [analysis, setAnalysis] = useState<HueAnalysis | null>(null);
   const [intensity, setIntensity] = useState(5);
+  const [finaleIntensity, setFinaleIntensity] = useState<number | null>(null);
   const [privateNote, setPrivateNote] = useState('');
   const [title, setTitle] = useState('');
   const [isPaletteLibraryOpen, setIsPaletteLibraryOpen] = useState(false);
@@ -73,8 +96,48 @@ export default function PortraitScreen() {
   const [selectedPaletteId, setSelectedPaletteId] = useState<string | null>(
     null,
   );
+  const [tiltMode, setTiltMode] = useState<TiltMode>('touch');
   const canvasRef = useRef<RefObject<CanvasRef | null> | null>(null);
+  const scrollRef = useRef<ScrollView | null>(null);
+  const saveSectionRef = useRef<View | null>(null);
+  const finaleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const tiltIntensityRef = useRef(intensity);
+  const intensityValueRef = useRef(intensity);
   const isFirstEntry = params.first === '1';
+  const riverState = useMemo(() => computeRiverState(entries), [entries]);
+  const unlockedPaletteIds = useMemo(
+    () => new Set(riverState.unlockedPaletteIds),
+    [riverState.unlockedPaletteIds],
+  );
+  const lockedPaletteLabels = useMemo(
+    () =>
+      curatedPalettes.reduce<Record<string, string | undefined>>(
+        (labels, palette, index) => {
+          if (!unlockedPaletteIds.has(palette.id)) {
+            labels[palette.id] = `Flows at ${getPaletteUnlockDay(index)} days`;
+          }
+
+          return labels;
+        },
+        {},
+      ),
+    [unlockedPaletteIds],
+  );
+  const hasLockedPalettes = useMemo(
+    () => Object.values(lockedPaletteLabels).some(Boolean),
+    [lockedPaletteLabels],
+  );
+  const displayIntensity = finaleIntensity ?? intensity;
+  const displayAnalysis = useMemo(() => {
+    if (!analysis) {
+      return null;
+    }
+
+    return finaleIntensity
+      ? applyIntensity(analysis, finaleIntensity)
+      : analysis;
+  }, [analysis, finaleIntensity]);
+  const activeTiltMode = reduceMotion ? 'touch' : tiltMode;
 
   useEffect(() => {
     let isMounted = true;
@@ -129,7 +192,13 @@ export default function PortraitScreen() {
       return;
     }
 
-    void updateDraftAnalysis(analysis);
+    const persistTimer = setTimeout(() => {
+      void updateDraftAnalysis(analysis);
+    }, 180);
+
+    return () => {
+      clearTimeout(persistTimer);
+    };
   }, [analysis]);
 
   useEffect(() => {
@@ -146,7 +215,90 @@ export default function PortraitScreen() {
     };
   }, [draft, intensity]);
 
+  useEffect(() => {
+    tiltIntensityRef.current = intensity;
+    intensityValueRef.current = intensity;
+  }, [intensity]);
+
+  useEffect(
+    () => () => {
+      if (finaleTimerRef.current) {
+        clearTimeout(finaleTimerRef.current);
+      }
+    },
+    [],
+  );
+
+  const handleTiltDelta = useCallback(
+    ({ x, y }: { x: number; y: number }) => {
+      if (activeTiltMode === 'intensity') {
+        const nextFloat = clamp(
+          tiltIntensityRef.current + y * TILT_INTENSITY_STEP,
+          1,
+          10,
+        );
+        const nextInteger = Math.round(nextFloat);
+
+        tiltIntensityRef.current = nextFloat;
+
+        if (nextInteger !== intensityValueRef.current) {
+          intensityValueRef.current = nextInteger;
+          setIntensity(nextInteger);
+          setAnalysis((current) =>
+            current ? applyIntensity(current, nextInteger) : current,
+          );
+          void gentleSelection();
+        }
+
+        return;
+      }
+
+      if (activeTiltMode === 'warmthLight') {
+        setAnalysis((current) => {
+          if (!current) {
+            return current;
+          }
+
+          const nextWarmth = clamp(
+            current.visual.warmth + x * TILT_VISUAL_STEP,
+            0,
+            1,
+          );
+          const nextBrightness = clamp(
+            current.visual.brightness + y * TILT_VISUAL_STEP,
+            0,
+            1,
+          );
+
+          if (
+            nextWarmth === current.visual.warmth &&
+            nextBrightness === current.visual.brightness
+          ) {
+            return current;
+          }
+
+          return normalizeHueAnalysis({
+            ...current,
+            visual: {
+              ...current.visual,
+              brightness: nextBrightness,
+              warmth: nextWarmth,
+            },
+          });
+        });
+      }
+    },
+    [activeTiltMode],
+  );
+
+  const { isAvailable: isTiltAvailable } = useTiltControl({
+    enabled: activeTiltMode !== 'touch',
+    onDelta: handleTiltDelta,
+  });
+
   function updateLiveIntensity(value: number) {
+    tiltIntensityRef.current = value;
+    intensityValueRef.current = value;
     setIntensity(value);
     setAnalysis((current) =>
       current ? applyIntensity(current, value) : current,
@@ -186,6 +338,48 @@ export default function PortraitScreen() {
         palette: originalAnalyzedPalette,
       }),
     );
+  }
+
+  function revealSaveSection() {
+    requestAnimationFrame(() => {
+      const scrollNode = findNodeHandle(scrollRef.current);
+
+      if (!scrollNode || !saveSectionRef.current) {
+        return;
+      }
+
+      saveSectionRef.current.measureLayout(
+        scrollNode,
+        (_x, y) => {
+          scrollRef.current?.scrollTo({
+            animated: !reduceMotion,
+            y: Math.max(0, y - spacing.lg),
+          });
+        },
+        () => undefined,
+      );
+    });
+  }
+
+  function handleFinishReveal() {
+    if (!analysis) {
+      return;
+    }
+
+    const boostedIntensity = Math.min(10, intensity + 2);
+
+    setFinaleIntensity(boostedIntensity);
+
+    if (finaleTimerRef.current) {
+      clearTimeout(finaleTimerRef.current);
+    }
+
+    finaleTimerRef.current = setTimeout(() => {
+      setFinaleIntensity(null);
+      finaleTimerRef.current = null;
+    }, FINALE_BOOST_MS);
+
+    setTimeout(revealSaveSection, reduceMotion ? 0 : 220);
   }
 
   async function startOver() {
@@ -247,7 +441,7 @@ export default function PortraitScreen() {
   }
 
   return (
-    <Screen>
+    <Screen scrollRef={scrollRef}>
       <FlowHeader step={2} totalSteps={2} />
       <View style={styles.stack}>
         <BrandText variant="title">Here is your feeling in color.</BrandText>
@@ -256,21 +450,32 @@ export default function PortraitScreen() {
         </BrandText>
       </View>
 
-      {analysis ? (
+      {analysis && displayAnalysis ? (
         <>
-          <HueCanvas
-            analysis={analysis}
-            onCanvasRef={(ref) => {
-              canvasRef.current = ref;
-            }}
+          <PinchToFinish
+            onFinish={handleFinishReveal}
             reduceMotion={reduceMotion}
-            seedKey={draft.startedAt}
+          >
+            <HueCanvas
+              analysis={displayAnalysis}
+              onCanvasRef={(ref) => {
+                canvasRef.current = ref;
+              }}
+              reduceMotion={reduceMotion}
+              seedKey={draft.startedAt}
+            />
+          </PinchToFinish>
+          <TiltModeControls
+            disabled={reduceMotion}
+            isAvailable={isTiltAvailable}
+            mode={activeTiltMode}
+            onModeChange={setTiltMode}
           />
           <IntensityMeter
             labels={{ max: 'Vivid', min: 'Soft' }}
             onChange={updateLiveIntensity}
             suggestedValue={draft.intensity}
-            value={intensity}
+            value={displayIntensity}
           />
           {analysis.safetyFlags.crisisLanguage ||
           analysis.safetyFlags.selfHarmLanguage ? (
@@ -307,7 +512,14 @@ export default function PortraitScreen() {
             </Pressable>
             {isPaletteLibraryOpen ? (
               <View style={styles.paletteLibraryContent}>
+                {hasLockedPalettes ? (
+                  <BrandText muted variant="small">
+                    Your Color River grows as you return — {riverState.flowDays}{' '}
+                    of 30 days so far.
+                  </BrandText>
+                ) : null}
                 <PaletteSwatchRow
+                  lockedPaletteLabels={lockedPaletteLabels}
                   onSelect={selectCuratedPalette}
                   palettes={curatedPalettes}
                   selectedPaletteId={selectedPaletteId}
@@ -329,7 +541,7 @@ export default function PortraitScreen() {
               </View>
             ) : null}
           </View>
-          <View style={styles.saveSection}>
+          <View ref={saveSectionRef} style={styles.saveSection}>
             <BrandText variant="lead">
               {isFirstEntry
                 ? 'Save this as your first Hue Entry?'

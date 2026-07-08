@@ -1,5 +1,6 @@
 import type { ListRenderItem, StyleProp, ViewStyle } from 'react-native';
 import { FlatList, Pressable, StyleSheet, View } from 'react-native';
+import { Feather } from '@expo/vector-icons';
 
 import { BrandText } from '@/src/components/BrandText';
 import type { CuratedPalette } from '@/src/lib/palettes';
@@ -8,11 +9,13 @@ import { colors, radius, spacing } from '@/src/theme';
 type PaletteSwatchRowProps = {
   onSelect: (palette: CuratedPalette) => void;
   palettes: CuratedPalette[];
+  lockedPaletteLabels?: Record<string, string | undefined>;
   selectedPaletteId?: string | null;
   style?: StyleProp<ViewStyle>;
 };
 
 export function PaletteSwatchRow({
+  lockedPaletteLabels,
   onSelect,
   palettes,
   selectedPaletteId,
@@ -20,16 +23,24 @@ export function PaletteSwatchRow({
 }: PaletteSwatchRowProps) {
   const renderItem: ListRenderItem<CuratedPalette> = ({ item }) => {
     const isSelected = item.id === selectedPaletteId;
+    const lockLabel = lockedPaletteLabels?.[item.id];
+    const isLocked = Boolean(lockLabel);
 
     return (
       <Pressable
         accessibilityLabel={`${item.name} palette`}
         accessibilityRole="button"
-        accessibilityState={{ selected: isSelected }}
-        onPress={() => onSelect(item)}
+        accessibilityState={{ disabled: isLocked, selected: isSelected }}
+        disabled={isLocked}
+        onPress={() => {
+          if (!isLocked) {
+            onSelect(item);
+          }
+        }}
         style={({ pressed }) => [
           styles.card,
           isSelected && styles.selectedCard,
+          isLocked && styles.lockedCard,
           pressed && styles.pressed,
         ]}
       >
@@ -53,6 +64,14 @@ export function PaletteSwatchRow({
         <BrandText muted numberOfLines={2} variant="caption">
           {item.mood}
         </BrandText>
+        {lockLabel ? (
+          <View style={styles.lockRow}>
+            <Feather color={colors.mistMuted} name="droplet" size={12} />
+            <BrandText muted numberOfLines={1} variant="caption">
+              {lockLabel}
+            </BrandText>
+          </View>
+        ) : null}
       </Pressable>
     );
   };
@@ -84,6 +103,15 @@ const styles = StyleSheet.create({
   content: {
     gap: spacing.sm,
     paddingRight: spacing.lg,
+  },
+  lockedCard: {
+    opacity: 0.4,
+  },
+  lockRow: {
+    alignItems: 'center',
+    backgroundColor: colors.transparent,
+    flexDirection: 'row',
+    gap: spacing.xs,
   },
   pressed: {
     opacity: 0.8,
