@@ -8,11 +8,13 @@ import { FlowHeader } from '@/src/components/FlowHeader';
 import { MicOrb } from '@/src/components/MicOrb';
 import { PrivacyNotice } from '@/src/components/PrivacyNotice';
 import { Screen } from '@/src/components/Screen';
+import { WaveformBars } from '@/src/components/WaveformBars';
 import {
   maxDurationMillis,
   useAudioRecorder,
 } from '@/src/hooks/useAudioRecorder';
 import { useReducedMotion } from '@/src/hooks/useReducedMotion';
+import { useSpeechTranscription } from '@/src/hooks/useSpeechTranscription';
 import { markDraftPending, startCreateDraft } from '@/src/lib/createDraft';
 import { colors, radius, spacing, typography } from '@/src/theme';
 
@@ -26,11 +28,15 @@ function formatElapsedTime(durationMillis: number) {
 
 export default function RecordScreen() {
   const router = useRouter();
+  const appliedTranscriptRef = useRef('');
   const draftStarted = useRef(false);
+  const userEditedAfterTranscriptRef = useRef(false);
+  const wasRecordingRef = useRef(false);
   const [reflection, setReflection] = useState('');
   const [textOnly, setTextOnly] = useState(false);
   const recorder = useAudioRecorder();
   const reduceMotion = useReducedMotion();
+  const transcription = useSpeechTranscription();
   const canContinue =
     reflection.trim().length > 0 || Boolean(recorder.recordingUri);
   const remainingSeconds = Math.ceil(
@@ -46,29 +52,74 @@ export default function RecordScreen() {
     };
   }, []);
 
+  useEffect(() => {
+    if (recorder.isRecording) {
+      wasRecordingRef.current = true;
+      return;
+    }
+
+    if (wasRecordingRef.current) {
+      wasRecordingRef.current = false;
+      transcription.stop();
+    }
+  }, [recorder.isRecording, transcription]);
+
+  useEffect(() => {
+    const transcript = transcription.transcript.trim();
+
+    if (
+      recorder.isRecording ||
+      !recorder.recordingUri ||
+      !transcript ||
+      userEditedAfterTranscriptRef.current
+    ) {
+      return;
+    }
+
+    appliedTranscriptRef.current = transcript;
+    setReflection(transcript);
+  }, [recorder.isRecording, recorder.recordingUri, transcription.transcript]);
+
   async function handleMicPress() {
     if (recorder.isRecording) {
+      transcription.stop();
       await recorder.stopRecording();
       return;
     }
 
-    await recorder.startRecording();
+    transcription.reset();
+    appliedTranscriptRef.current = '';
+    userEditedAfterTranscriptRef.current = false;
+
+    const didStartRecording = await recorder.startRecording();
+
+    if (didStartRecording) {
+      void transcription.start();
+    }
   }
 
-  async function continueToIntensity() {
-    const mode = recorder.recordingUri && !reflection.trim() ? 'voice' : 'text';
+  function handleReflectionChange(value: string) {
+    setReflection(value);
+
+    if (value !== appliedTranscriptRef.current) {
+      userEditedAfterTranscriptRef.current = true;
+    }
+  }
+
+  async function continueToPortrait() {
+    const mode = recorder.recordingUri ? 'voice' : 'text';
     const text =
       reflection.trim() ||
       'A private voice reflection was recorded and will be translated by the mock local hue engine.';
 
     await startCreateDraft(mode, text, recorder.recordingUri);
     draftStarted.current = true;
-    router.push('/create/intensity');
+    router.push('/create/portrait');
   }
 
   return (
     <Screen>
-      <FlowHeader step={1} />
+      <FlowHeader step={1} totalSteps={2} />
       <View style={styles.stack}>
         <BrandText variant="title">Speak or type what feels present.</BrandText>
         <BrandText muted>
@@ -87,9 +138,18 @@ export default function RecordScreen() {
           />
           {recorder.isRecording ? (
             <View style={styles.recordingMeta}>
+              <WaveformBars
+                metering={recorder.metering}
+                reduceMotion={reduceMotion}
+              />
               <BrandText muted variant="small">
                 {formatElapsedTime(recorder.durationMillis)}
               </BrandText>
+              {transcription.interimTranscript.trim() ? (
+                <BrandText muted style={styles.hearingText} variant="small">
+                  Hearing: {transcription.interimTranscript.trim()}
+                </BrandText>
+              ) : null}
               {showRecordingWarning ? (
                 <BrandText style={styles.recordingWarning} variant="small">
                   Wrapping up soon — {remainingSeconds}s left.
@@ -103,6 +163,18 @@ export default function RecordScreen() {
       {recorder.error ? (
         <BrandText style={styles.error}>{recorder.error}</BrandText>
       ) : null}
+      {!textOnly && !transcription.isAvailable ? (
+        <BrandText muted variant="small">
+          {
+            "Transcription isn't available on this device — your voice still shapes the portrait."
+          }
+        </BrandText>
+      ) : null}
+      {transcription.error ? (
+        <BrandText muted variant="small">
+          {transcription.error}
+        </BrandText>
+      ) : null}
       {recorder.recordingUri ? (
         <BrandText muted variant="small">
           Voice reflection captured for this local mock flow.
@@ -112,7 +184,7 @@ export default function RecordScreen() {
       <TextInput
         accessibilityLabel="Typed reflection"
         multiline
-        onChangeText={setReflection}
+        onChangeText={handleReflectionChange}
         placeholder="Type here..."
         placeholderTextColor={colors.smoke}
         style={styles.input}
@@ -125,8 +197,8 @@ export default function RecordScreen() {
         mock entry after you save.
       </PrivacyNotice>
 
-      <Button disabled={!canContinue} onPress={continueToIntensity}>
-        Continue to intensity
+      <Button disabled={!canContinue} onPress={continueToPortrait}>
+        Create portrait
       </Button>
       <Button onPress={() => setTextOnly((value) => !value)} variant="ghost">
         {textOnly ? 'Show voice option' : 'Type instead'}
@@ -138,6 +210,9 @@ export default function RecordScreen() {
 const styles = StyleSheet.create({
   error: {
     color: colors.danger,
+  },
+  hearingText: {
+    textAlign: 'center',
   },
   input: {
     backgroundColor: colors.inkSoft,

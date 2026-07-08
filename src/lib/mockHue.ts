@@ -6,6 +6,46 @@ const highDistressWords =
 const crisisWords =
   /(suicide|kill myself|end my life|hurt myself|self harm|self-harm)/i;
 
+function getIntensityMotion(
+  intensity: number,
+): HueAnalysis['visual']['motion'] {
+  if (intensity > 7) {
+    return 'bloom';
+  }
+
+  if (intensity > 4) {
+    return 'soft_pulse';
+  }
+
+  return 'still';
+}
+
+function hasWarmIntensityBonus(analysis: HueAnalysis) {
+  return analysis.visual.warmth >= 0.65;
+}
+
+export function applyIntensity(
+  analysis: HueAnalysis,
+  intensityHint: number,
+): HueAnalysis {
+  const next = fallbackHueAnalysis(analysis);
+  const intensity = Math.round(clamp(intensityHint, 1, 10));
+  const warmBonus = hasWarmIntensityBonus(next) ? 0.08 : 0;
+
+  return {
+    ...next,
+    intensity,
+    arousal: clamp(intensity / 10, 0, 1),
+    visual: {
+      ...next.visual,
+      motion: getIntensityMotion(intensity),
+      brightness: clamp(0.32 + intensity * 0.045 + warmBonus, 0, 1),
+      particleDensity: clamp(0.12 + intensity * 0.055, 0, 1),
+      animationSpeed: clamp(0.14 + intensity * 0.06, 0, 1),
+    },
+  };
+}
+
 export const sampleHueAnalysis = fallbackHueAnalysis({
   primaryEmotion: 'overwhelmed anticipation',
   secondaryEmotions: ['excitement', 'uncertainty', 'pressure'],
@@ -137,7 +177,7 @@ export function createMockHueAnalysis(
           },
         ];
 
-  return fallbackHueAnalysis({
+  const analysis = fallbackHueAnalysis({
     primaryEmotion: isCharged
       ? 'charged reflection'
       : isTender
@@ -156,7 +196,6 @@ export function createMockHueAnalysis(
     ],
     intensity,
     valence: isWarm ? 0.35 : isTender ? -0.18 : 0.02,
-    arousal: clamp(intensity / 10, 0, 1),
     palette,
     visual: {
       composition: isCharged
@@ -164,14 +203,13 @@ export function createMockHueAnalysis(
         : isTender
           ? 'mist_field'
           : 'center_bloom',
-      motion:
-        intensity > 7 ? 'bloom' : intensity > 4 ? 'soft_pulse' : 'slow_drift',
+      motion: 'still',
       texture: isTender ? 'velvet' : isWarm ? 'glow' : 'soft_grain',
-      brightness: clamp(0.32 + intensity * 0.045 + (isWarm ? 0.08 : 0), 0, 1),
+      brightness: 0.48,
       warmth: isWarm ? 0.72 : isTender ? 0.42 : 0.5,
       edgeSoftness: isCharged ? 0.46 : 0.72,
-      particleDensity: clamp(0.12 + intensity * 0.055, 0, 1),
-      animationSpeed: clamp(0.14 + intensity * 0.06, 0, 1),
+      particleDensity: 0.22,
+      animationSpeed: 0.28,
     },
     userFacingSummary: highDistress
       ? 'This hue may be holding a very heavy feeling with a small protected edge of light.'
@@ -182,4 +220,6 @@ export function createMockHueAnalysis(
       selfHarmLanguage: crisisLanguage,
     },
   });
+
+  return applyIntensity(analysis, intensity);
 }

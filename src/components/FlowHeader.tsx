@@ -6,12 +6,12 @@ import { colors, spacing } from '@/src/theme';
 
 type FlowHeaderProps = {
   step: 1 | 2 | 3;
+  totalSteps?: 2 | 3;
 };
 
-const steps = [1, 2, 3] as const;
-
-export function FlowHeader({ step }: FlowHeaderProps) {
+export function FlowHeader({ step, totalSteps = 2 }: FlowHeaderProps) {
   const router = useRouter();
+  const steps = Array.from({ length: totalSteps }, (_, index) => index + 1);
 
   return (
     <View style={styles.root}>

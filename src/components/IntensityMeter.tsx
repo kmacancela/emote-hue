@@ -42,7 +42,7 @@ export function IntensityMeter({
                 styles.step,
                 active && styles.activeStep,
                 suggested && styles.suggestedStep,
-                { height: 26 + level * 6 },
+                { height: 14 + level * 3 },
               ]}
             />
           );
@@ -62,7 +62,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.amber,
   },
   container: {
-    gap: spacing.md,
+    gap: spacing.xs,
   },
   label: {
     color: colors.mistMuted,
@@ -78,7 +78,7 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
     flexDirection: 'row',
     gap: spacing.xs,
-    minHeight: 96,
+    minHeight: 48,
   },
   step: {
     backgroundColor: colors.inkSoft,

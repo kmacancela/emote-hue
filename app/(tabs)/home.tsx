@@ -100,9 +100,7 @@ export default function HomeScreen() {
       return;
     }
 
-    router.push(
-      resumeDraft.analysis ? '/create/portrait' : '/create/intensity',
-    );
+    router.push('/create/portrait');
   }
 
   async function letDraftGo() {
