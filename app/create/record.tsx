@@ -7,6 +7,7 @@ import { Button } from '@/src/components/Button';
 import { FlowHeader } from '@/src/components/FlowHeader';
 import { MicOrb } from '@/src/components/MicOrb';
 import { PrivacyNotice } from '@/src/components/PrivacyNotice';
+import { ReflectionVoiceStatus } from '@/src/components/ReflectionVoiceStatus';
 import { Screen } from '@/src/components/Screen';
 import { WaveformBars } from '@/src/components/WaveformBars';
 import {
@@ -37,8 +38,9 @@ export default function RecordScreen() {
   const recorder = useAudioRecorder();
   const reduceMotion = useReducedMotion();
   const transcription = useSpeechTranscription();
+  const hasTranscript = reflection.trim().length > 0;
   const canContinue =
-    reflection.trim().length > 0 || Boolean(recorder.recordingUri);
+    hasTranscript || Boolean(recorder.recordingUri);
   const remainingSeconds = Math.ceil(
     Math.max(0, maxDurationMillis - recorder.durationMillis) / 1000,
   );
@@ -145,56 +147,43 @@ export default function RecordScreen() {
               <BrandText muted variant="small">
                 {formatElapsedTime(recorder.durationMillis)}
               </BrandText>
-              {transcription.interimTranscript.trim() ? (
-                <BrandText muted style={styles.hearingText} variant="small">
-                  Hearing: {transcription.interimTranscript.trim()}
-                </BrandText>
-              ) : null}
-              {showRecordingWarning ? (
-                <BrandText style={styles.recordingWarning} variant="small">
-                  Wrapping up soon — {remainingSeconds}s left.
-                </BrandText>
-              ) : null}
             </View>
           ) : null}
         </View>
       ) : null}
 
-      {recorder.error ? (
-        <BrandText style={styles.error}>{recorder.error}</BrandText>
-      ) : null}
-      {!textOnly && !transcription.isAvailable ? (
-        <BrandText muted variant="small">
-          {
-            "Transcription isn't available on this device — your voice still shapes the portrait."
-          }
-        </BrandText>
-      ) : null}
-      {transcription.error ? (
-        <BrandText muted variant="small">
-          {transcription.error}
-        </BrandText>
-      ) : null}
-      {recorder.recordingUri ? (
-        <BrandText muted variant="small">
-          Voice reflection captured for this local mock flow.
-        </BrandText>
-      ) : null}
-
-      <TextInput
-        accessibilityLabel="Typed reflection"
-        multiline
-        onChangeText={handleReflectionChange}
-        placeholder="Type here..."
-        placeholderTextColor={colors.smoke}
-        style={styles.input}
-        textAlignVertical="top"
-        value={reflection}
+      <ReflectionVoiceStatus
+        hasTranscript={hasTranscript}
+        interimTranscript={transcription.interimTranscript}
+        isRecording={recorder.isRecording}
+        recorderError={recorder.error}
+        recordingUri={recorder.recordingUri}
+        remainingSeconds={remainingSeconds}
+        showRecordingWarning={showRecordingWarning}
+        transcriptionError={transcription.error}
+        transcriptionUnavailable={!textOnly && !transcription.isAvailable}
       />
 
+      <View style={styles.inputGroup}>
+        <BrandText variant="small">Your words</BrandText>
+        <TextInput
+          accessibilityLabel="Typed reflection"
+          multiline
+          onChangeText={handleReflectionChange}
+          placeholder="Type a few words, or edit the transcript here."
+          placeholderTextColor={colors.mistMuted}
+          style={styles.input}
+          textAlignVertical="top"
+          value={reflection}
+        />
+        <BrandText muted variant="small">
+          This text can be changed before the portrait is made.
+        </BrandText>
+      </View>
+
       <PrivacyNotice>
-        Raw audio is not saved by default. This milestone stores only a local
-        mock entry after you save.
+        Raw audio is not saved by default. Saved entries stay on this device in
+        this version.
       </PrivacyNotice>
 
       <Button disabled={!canContinue} onPress={continueToPortrait}>
@@ -208,12 +197,6 @@ export default function RecordScreen() {
 }
 
 const styles = StyleSheet.create({
-  error: {
-    color: colors.danger,
-  },
-  hearingText: {
-    textAlign: 'center',
-  },
   input: {
     backgroundColor: colors.inkSoft,
     borderColor: colors.lineStrong,
@@ -225,6 +208,10 @@ const styles = StyleSheet.create({
     minHeight: 144,
     padding: spacing.md,
   },
+  inputGroup: {
+    backgroundColor: colors.transparent,
+    gap: spacing.xs,
+  },
   micStack: {
     alignItems: 'center',
     backgroundColor: colors.transparent,
@@ -234,9 +221,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: colors.transparent,
     gap: spacing.xs,
-  },
-  recordingWarning: {
-    color: colors.amber,
   },
   stack: {
     backgroundColor: colors.transparent,
