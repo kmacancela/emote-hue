@@ -67,11 +67,11 @@ export function MicOrb({
           style={styles.orb}
         >
           <View style={styles.inner}>
-            <Feather
-              color={colors.mist}
-              name={isRecording ? 'square' : 'mic'}
-              size={26}
-            />
+            {isRecording ? (
+              <View style={styles.stopGlyph} />
+            ) : (
+              <Feather color={colors.mist} name="mic" size={26} />
+            )}
             <Text style={styles.label}>
               {isRecording ? 'Listening' : 'Speak'}
             </Text>
@@ -88,7 +88,7 @@ const styles = StyleSheet.create({
   },
   inner: {
     alignItems: 'center',
-    backgroundColor: '#15111F99',
+    backgroundColor: colors.transparent,
     borderRadius: radius.pill,
     height: 116,
     justifyContent: 'center',
@@ -112,5 +112,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     minHeight: 160,
+  },
+  stopGlyph: {
+    backgroundColor: colors.mist,
+    borderRadius: 3,
+    height: 18,
+    marginBottom: 3,
+    width: 18,
   },
 });

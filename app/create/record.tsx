@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'expo-router';
 import { StyleSheet, TextInput, View } from 'react-native';
+import type { ScrollView } from 'react-native';
 
 import { BrandText } from '@/src/components/BrandText';
 import { Button } from '@/src/components/Button';
@@ -31,6 +32,7 @@ export default function RecordScreen() {
   const router = useRouter();
   const appliedTranscriptRef = useRef('');
   const draftStarted = useRef(false);
+  const scrollRef = useRef<ScrollView | null>(null);
   const userEditedAfterTranscriptRef = useRef(false);
   const wasRecordingRef = useRef(false);
   const [reflection, setReflection] = useState('');
@@ -120,13 +122,12 @@ export default function RecordScreen() {
   }
 
   return (
-    <Screen>
+    <Screen scrollRef={scrollRef}>
       <FlowHeader step={1} totalSteps={2} />
       <View style={styles.stack}>
-        <BrandText variant="title">Speak or type what feels present.</BrandText>
+        <BrandText variant="title">Tell me how you feel right now.</BrandText>
         <BrandText muted>
-          A few words are enough. You can also choose color and intensity
-          without explaining.
+          Speak, type, or both. A few words are enough.
         </BrandText>
       </View>
 
@@ -164,22 +165,21 @@ export default function RecordScreen() {
         transcriptionUnavailable={!textOnly && !transcription.isAvailable}
       />
 
-      <View style={styles.inputGroup}>
-        <BrandText variant="small">Your words</BrandText>
-        <TextInput
-          accessibilityLabel="Typed reflection"
-          multiline
-          onChangeText={handleReflectionChange}
-          placeholder="Type a few words, or edit the transcript here."
-          placeholderTextColor={colors.mistMuted}
-          style={styles.input}
-          textAlignVertical="top"
-          value={reflection}
-        />
-        <BrandText muted variant="small">
-          This text can be changed before the portrait is made.
-        </BrandText>
-      </View>
+      <TextInput
+        accessibilityLabel="Typed reflection"
+        multiline
+        onChangeText={handleReflectionChange}
+        onFocus={() => {
+          setTimeout(() => {
+            scrollRef.current?.scrollToEnd({ animated: !reduceMotion });
+          }, 120);
+        }}
+        placeholder="Type a few words, or edit the transcript here."
+        placeholderTextColor={colors.mistMuted}
+        style={styles.input}
+        textAlignVertical="top"
+        value={reflection}
+      />
 
       <PrivacyNotice>
         Raw audio is not saved by default. Saved entries stay on this device in
@@ -207,10 +207,6 @@ const styles = StyleSheet.create({
     lineHeight: typography.lineHeight.body,
     minHeight: 144,
     padding: spacing.md,
-  },
-  inputGroup: {
-    backgroundColor: colors.transparent,
-    gap: spacing.xs,
   },
   micStack: {
     alignItems: 'center',

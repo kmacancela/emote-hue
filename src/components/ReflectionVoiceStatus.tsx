@@ -1,6 +1,6 @@
-import { StyleSheet } from 'react-native';
+import { StyleSheet, Text } from 'react-native';
 
-import { colors } from '@/src/theme';
+import { colors, typography } from '@/src/theme';
 import { BrandText } from './BrandText';
 
 type ReflectionVoiceStatusProps = {
@@ -46,9 +46,10 @@ export function ReflectionVoiceStatus({
 
   if (isRecording && interim) {
     return (
-      <BrandText muted style={styles.status} variant="small">
-        Hearing: {interim}
-      </BrandText>
+      <Text style={styles.hearing}>
+        <Text style={styles.hearingLabel}>Hearing: </Text>
+        <Text style={styles.hearingPhrase}>{interim}</Text>
+      </Text>
     );
   }
 
@@ -69,11 +70,7 @@ export function ReflectionVoiceStatus({
   }
 
   if (recordingUri && hasTranscript) {
-    return (
-      <BrandText muted style={styles.status} variant="small">
-        Transcript added below. You can edit it before creating the portrait.
-      </BrandText>
-    );
+    return null;
   }
 
   if (recordingUri) {
@@ -99,6 +96,20 @@ const styles = StyleSheet.create({
   error: {
     color: colors.danger,
     textAlign: 'center',
+  },
+  hearing: {
+    color: colors.mistMuted,
+    fontFamily: typography.family.body,
+    fontSize: typography.size.small,
+    lineHeight: typography.lineHeight.small,
+    textAlign: 'center',
+  },
+  hearingLabel: {
+    color: colors.mistMuted,
+  },
+  hearingPhrase: {
+    color: colors.amber,
+    fontWeight: typography.weight.semibold,
   },
   status: {
     textAlign: 'center',

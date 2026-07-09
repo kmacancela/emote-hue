@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { StyleSheet, TextInput, View } from 'react-native';
+import type { ScrollView } from 'react-native';
 
 import { BrandText } from '@/src/components/BrandText';
 import { Button } from '@/src/components/Button';
@@ -30,6 +31,7 @@ export default function FirstCheckInScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ mode?: string }>();
   const appliedTranscriptRef = useRef('');
+  const scrollRef = useRef<ScrollView | null>(null);
   const userEditedAfterTranscriptRef = useRef(false);
   const wasRecordingRef = useRef(false);
   const [reflection, setReflection] = useState('');
@@ -109,15 +111,11 @@ export default function FirstCheckInScreen() {
   }
 
   return (
-    <Screen>
+    <Screen scrollRef={scrollRef}>
       <View style={styles.stack}>
-        <BrandText variant="title">
-          Say a few words about how you feel right now.
-        </BrandText>
+        <BrandText variant="title">Tell me how you feel right now.</BrandText>
         <BrandText muted>
-          {
-            "You can be honest, vague, messy, or quiet for a moment. There's no right way."
-          }
+          Speak, type, or both. A few words are enough.
         </BrandText>
       </View>
 
@@ -155,22 +153,21 @@ export default function FirstCheckInScreen() {
         transcriptionUnavailable={!typedMode && !transcription.isAvailable}
       />
 
-      <View style={styles.inputGroup}>
-        <BrandText variant="small">Your words</BrandText>
-        <TextInput
-          accessibilityLabel="Type your feeling"
-          multiline
-          onChangeText={handleReflectionChange}
-          placeholder="Type a few words, or edit the transcript here."
-          placeholderTextColor={colors.mistMuted}
-          style={styles.input}
-          textAlignVertical="top"
-          value={reflection}
-        />
-        <BrandText muted variant="small">
-          This text can be changed before the portrait is made.
-        </BrandText>
-      </View>
+      <TextInput
+        accessibilityLabel="Type your feeling"
+        multiline
+        onChangeText={handleReflectionChange}
+        onFocus={() => {
+          setTimeout(() => {
+            scrollRef.current?.scrollToEnd({ animated: !reduceMotion });
+          }, 120);
+        }}
+        placeholder="Type a few words, or edit the transcript here."
+        placeholderTextColor={colors.mistMuted}
+        style={styles.input}
+        textAlignVertical="top"
+        value={reflection}
+      />
 
       <PrivacyNotice>
         Raw audio is not saved by default. Saved entries stay on this device in
@@ -195,10 +192,6 @@ const styles = StyleSheet.create({
     lineHeight: typography.lineHeight.body,
     minHeight: 132,
     padding: spacing.md,
-  },
-  inputGroup: {
-    backgroundColor: colors.transparent,
-    gap: spacing.xs,
   },
   micStack: {
     alignItems: 'center',

@@ -44,7 +44,9 @@ export function Screen({
         >
           {scroll ? (
             <ScrollView
+              automaticallyAdjustKeyboardInsets
               contentContainerStyle={contentStyle}
+              keyboardDismissMode="interactive"
               keyboardShouldPersistTaps="handled"
               ref={scrollRef}
               showsVerticalScrollIndicator={false}
