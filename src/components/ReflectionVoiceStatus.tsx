@@ -15,6 +15,16 @@ type ReflectionVoiceStatusProps = {
   transcriptionUnavailable: boolean;
 };
 
+function splitLatestWord(text: string) {
+  const match = /^(.*\s)(\S+)$/.exec(text);
+
+  if (!match) {
+    return { latest: text, rest: '' };
+  }
+
+  return { latest: match[2], rest: match[1] };
+}
+
 export function ReflectionVoiceStatus({
   hasTranscript,
   interimTranscript,
@@ -45,10 +55,13 @@ export function ReflectionVoiceStatus({
   const interim = interimTranscript.trim();
 
   if (isRecording && interim) {
+    const { latest, rest } = splitLatestWord(interim);
+
     return (
       <Text style={styles.hearing}>
         <Text style={styles.hearingLabel}>Hearing: </Text>
-        <Text style={styles.hearingPhrase}>{interim}</Text>
+        {rest ? <Text style={styles.hearingRest}>{rest}</Text> : null}
+        <Text style={styles.hearingPhrase}>{latest}</Text>
       </Text>
     );
   }
@@ -110,6 +123,9 @@ const styles = StyleSheet.create({
   hearingPhrase: {
     color: colors.amber,
     fontWeight: typography.weight.semibold,
+  },
+  hearingRest: {
+    color: colors.mistMuted,
   },
   status: {
     textAlign: 'center',

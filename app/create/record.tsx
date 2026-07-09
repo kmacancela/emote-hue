@@ -181,17 +181,17 @@ export default function RecordScreen() {
         value={reflection}
       />
 
-      <PrivacyNotice>
-        Raw audio is not saved by default. Saved entries stay on this device in
-        this version.
-      </PrivacyNotice>
-
       <Button disabled={!canContinue} onPress={continueToPortrait}>
         Create portrait
       </Button>
       <Button onPress={() => setTextOnly((value) => !value)} variant="ghost">
         {textOnly ? 'Show voice option' : 'Type instead'}
       </Button>
+
+      <PrivacyNotice>
+        Raw audio is not saved by default. Saved entries stay on this device in
+        this version.
+      </PrivacyNotice>
     </Screen>
   );
 }

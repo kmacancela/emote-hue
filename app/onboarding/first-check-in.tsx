@@ -169,14 +169,14 @@ export default function FirstCheckInScreen() {
         value={reflection}
       />
 
+      <Button disabled={!canContinue} onPress={continueToPortrait}>
+        Create portrait
+      </Button>
+
       <PrivacyNotice>
         Raw audio is not saved by default. Saved entries stay on this device in
         this version.
       </PrivacyNotice>
-
-      <Button disabled={!canContinue} onPress={continueToPortrait}>
-        Create portrait
-      </Button>
     </Screen>
   );
 }

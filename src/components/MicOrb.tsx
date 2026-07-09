@@ -61,7 +61,7 @@ export function MicOrb({
       onPress={onPress}
       style={styles.pressable}
     >
-      <Animated.View style={[styles.glow, animatedStyle]}>
+      <Animated.View style={animatedStyle}>
         <LinearGradient
           colors={[colors.rose, colors.amber, colors.lavender]}
           style={styles.orb}
@@ -83,9 +83,6 @@ export function MicOrb({
 }
 
 const styles = StyleSheet.create({
-  glow: {
-    boxShadow: '0 0 28px rgba(167, 139, 250, 0.42)',
-  },
   inner: {
     alignItems: 'center',
     backgroundColor: colors.transparent,
