@@ -3,8 +3,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import {
-  Animated,
-  Easing,
   findNodeHandle,
   Pressable,
   ScrollView,
@@ -45,7 +43,7 @@ import {
 } from '@/src/lib/createDraft';
 import { computeRiverState, getPaletteUnlockDay } from '@/src/lib/colorRiver';
 import { gentleSelection, gentleSuccess } from '@/src/lib/haptics';
-import { applyIntensity } from '@/src/lib/mockHue';
+import { applyIntensity, sampleHueAnalysis } from '@/src/lib/mockHue';
 import { curatedPalettes } from '@/src/lib/palettes';
 import type { CuratedPalette } from '@/src/lib/palettes';
 import { capturePortraitSnapshot } from '@/src/lib/portraitSnapshot';
@@ -67,17 +65,19 @@ const TILT_VISUAL_STEP = 0.025;
 
 const loadingStages = [
   {
-    detail: 'Gathering your palette and color choices.',
     label: 'Preparing colors...',
   },
   {
-    detail: 'Reading the feeling in your words.',
-    label: 'Reading reflection...',
-  },
-  {
-    detail: 'The last colors are settling into place.',
     label: 'Finishing portrait...',
   },
+] as const;
+
+const loadingPaletteRoles = [
+  'base',
+  'shadow',
+  'accent',
+  'light',
+  'neutral',
 ] as const;
 
 const adjustmentControls = [
@@ -90,6 +90,40 @@ const adjustmentControls = [
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
+}
+
+function createLoadingAnalysis(palette: string[]): HueAnalysis {
+  const fallbackPalette = [
+    colors.ink,
+    colors.violetDepth,
+    colors.lavender,
+    colors.amber,
+    colors.rose,
+  ];
+  const swatches = [...palette, ...fallbackPalette];
+
+  return normalizeHueAnalysis({
+    ...sampleHueAnalysis,
+    intensity: 8,
+    palette: loadingPaletteRoles.map((role, index) => ({
+      hex: swatches[index],
+      meaning: 'portrait forming',
+      role,
+      weight: role === 'base' ? 0.34 : role === 'shadow' ? 0.22 : 0.14,
+    })),
+    primaryEmotion: 'portrait forming',
+    visual: {
+      ...sampleHueAnalysis.visual,
+      animationSpeed: 0.42,
+      brightness: 0.56,
+      composition: 'liquid_ribbon',
+      edgeSoftness: 0.78,
+      motion: 'bloom',
+      particleDensity: 0.5,
+      texture: 'glow',
+      warmth: 0.52,
+    },
+  });
 }
 
 export default function PortraitScreen() {
@@ -487,6 +521,20 @@ export default function PortraitScreen() {
     );
   }
 
+  if (!analysis || !displayAnalysis) {
+    return (
+      <LoadingExperience
+        error={error}
+        isCalibrationLoading={isCalibrationLoading}
+        key={analysisAttempt}
+        onCancel={returnToReflection}
+        onRetry={retryAnalysis}
+        palette={loadingPalette}
+        reduceMotion={reduceMotion}
+      />
+    );
+  }
+
   return (
     <Screen scrollRef={scrollRef}>
       <FlowHeader step={2} totalSteps={2} />
@@ -497,144 +545,130 @@ export default function PortraitScreen() {
         </BrandText>
       </View>
 
-      {analysis && displayAnalysis ? (
-        <>
-          <PinchToFinish
-            onFinish={handleFinishReveal}
-            reduceMotion={reduceMotion}
-          >
-            <HueCanvas
-              analysis={displayAnalysis}
-              onCanvasRef={(ref) => {
-                canvasRef.current = ref;
-              }}
-              reduceMotion={reduceMotion}
-              seedKey={draft.startedAt}
+      <PinchToFinish
+        onFinish={handleFinishReveal}
+        reduceMotion={reduceMotion}
+      >
+        <HueCanvas
+          analysis={displayAnalysis}
+          onCanvasRef={(ref) => {
+            canvasRef.current = ref;
+          }}
+          reduceMotion={reduceMotion}
+          seedKey={draft.startedAt}
+        />
+      </PinchToFinish>
+      <TiltModeControls
+        disabled={reduceMotion}
+        isAvailable={isTiltAvailable}
+        mode={activeTiltMode}
+        onModeChange={setTiltMode}
+      />
+      <IntensityMeter
+        labels={{ max: 'Vivid', min: 'Soft' }}
+        onChange={updateLiveIntensity}
+        suggestedValue={draft.intensity}
+        value={displayIntensity}
+      />
+      {analysis.safetyFlags.crisisLanguage ||
+      analysis.safetyFlags.selfHarmLanguage ? (
+        <SupportNotice />
+      ) : null}
+      <BrandText muted>{analysis.userFacingSummary}</BrandText>
+      <View style={styles.adjustments}>
+        {adjustmentControls.map((item) => (
+          <AdjustChip
+            icon={item.icon}
+            key={item.value}
+            label={item.label}
+            onPress={() => adjustPortrait(item.value)}
+          />
+        ))}
+      </View>
+      <EmotionChips labels={analysis.emotionWords} />
+      <View style={styles.paletteLibrary}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityState={{ expanded: isPaletteLibraryOpen }}
+          onPress={() => setIsPaletteLibraryOpen((current) => !current)}
+          style={({ pressed }) => [
+            styles.paletteLibraryHeader,
+            pressed && styles.pressed,
+          ]}
+        >
+          <BrandText variant="small">Choose a different palette</BrandText>
+          <Feather
+            color={colors.mistMuted}
+            name={isPaletteLibraryOpen ? 'chevron-up' : 'chevron-down'}
+            size={18}
+          />
+        </Pressable>
+        {isPaletteLibraryOpen ? (
+          <View style={styles.paletteLibraryContent}>
+            {hasLockedPalettes ? (
+              <BrandText muted variant="small">
+                Your Color River grows as you return — {riverState.flowDays}{' '}
+                of 30 days so far.
+              </BrandText>
+            ) : null}
+            <PaletteSwatchRow
+              lockedPaletteLabels={lockedPaletteLabels}
+              onSelect={selectCuratedPalette}
+              palettes={curatedPalettes}
+              selectedPaletteId={selectedPaletteId}
             />
-          </PinchToFinish>
-          <TiltModeControls
-            disabled={reduceMotion}
-            isAvailable={isTiltAvailable}
-            mode={activeTiltMode}
-            onModeChange={setTiltMode}
-          />
-          <IntensityMeter
-            labels={{ max: 'Vivid', min: 'Soft' }}
-            onChange={updateLiveIntensity}
-            suggestedValue={draft.intensity}
-            value={displayIntensity}
-          />
-          {analysis.safetyFlags.crisisLanguage ||
-          analysis.safetyFlags.selfHarmLanguage ? (
-            <SupportNotice />
-          ) : null}
-          <BrandText muted>{analysis.userFacingSummary}</BrandText>
-          <View style={styles.adjustments}>
-            {adjustmentControls.map((item) => (
-              <AdjustChip
-                icon={item.icon}
-                key={item.value}
-                label={item.label}
-                onPress={() => adjustPortrait(item.value)}
-              />
-            ))}
-          </View>
-          <EmotionChips labels={analysis.emotionWords} />
-          <View style={styles.paletteLibrary}>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityState={{ expanded: isPaletteLibraryOpen }}
-              onPress={() => setIsPaletteLibraryOpen((current) => !current)}
-              style={({ pressed }) => [
-                styles.paletteLibraryHeader,
-                pressed && styles.pressed,
-              ]}
-            >
-              <BrandText variant="small">Choose a different palette</BrandText>
-              <Feather
-                color={colors.mistMuted}
-                name={isPaletteLibraryOpen ? 'chevron-up' : 'chevron-down'}
-                size={18}
-              />
-            </Pressable>
-            {isPaletteLibraryOpen ? (
-              <View style={styles.paletteLibraryContent}>
-                {hasLockedPalettes ? (
-                  <BrandText muted variant="small">
-                    Your Color River grows as you return — {riverState.flowDays}{' '}
-                    of 30 days so far.
-                  </BrandText>
-                ) : null}
-                <PaletteSwatchRow
-                  lockedPaletteLabels={lockedPaletteLabels}
-                  onSelect={selectCuratedPalette}
-                  palettes={curatedPalettes}
-                  selectedPaletteId={selectedPaletteId}
-                />
-                {originalAnalyzedPalette && selectedPaletteId ? (
-                  <Pressable
-                    accessibilityRole="button"
-                    onPress={restoreOriginalPalette}
-                    style={({ pressed }) => [
-                      styles.backToColorsChip,
-                      pressed && styles.pressed,
-                    ]}
-                  >
-                    <Text style={styles.backToColorsLabel}>
-                      Back to my colors
-                    </Text>
-                  </Pressable>
-                ) : null}
-              </View>
+            {originalAnalyzedPalette && selectedPaletteId ? (
+              <Pressable
+                accessibilityRole="button"
+                onPress={restoreOriginalPalette}
+                style={({ pressed }) => [
+                  styles.backToColorsChip,
+                  pressed && styles.pressed,
+                ]}
+              >
+                <Text style={styles.backToColorsLabel}>
+                  Back to my colors
+                </Text>
+              </Pressable>
             ) : null}
           </View>
-          <View ref={saveSectionRef} style={styles.saveSection}>
-            <BrandText variant="lead">
-              {isFirstEntry
-                ? 'Save this as your first Hue Entry?'
-                : 'Save this Hue Entry?'}
-            </BrandText>
-            <TextInput
-              accessibilityLabel="Entry title"
-              onChangeText={setTitle}
-              placeholder="Optional title"
-              placeholderTextColor={colors.smoke}
-              style={styles.input}
-              value={title}
-            />
-            <TextInput
-              accessibilityLabel="Private note"
-              multiline
-              onChangeText={setPrivateNote}
-              placeholder="Optional private note"
-              placeholderTextColor={colors.smoke}
-              style={[styles.input, styles.note]}
-              textAlignVertical="top"
-              value={privateNote}
-            />
-            <PrivacyNotice>
-              Save privately stores the Hue Portrait and your optional note in
-              local MVP storage. Raw audio is not saved.
-            </PrivacyNotice>
-            <Button disabled={isLoading} onPress={savePrivately}>
-              Save privately
-            </Button>
-            <Button onPress={startOver} variant="ghost">
-              Start over
-            </Button>
-          </View>
-        </>
-      ) : (
-        <LoadingExperience
-          error={error}
-          isCalibrationLoading={isCalibrationLoading}
-          key={analysisAttempt}
-          onCancel={returnToReflection}
-          onRetry={retryAnalysis}
-          palette={loadingPalette}
-          reduceMotion={reduceMotion}
+        ) : null}
+      </View>
+      <View ref={saveSectionRef} style={styles.saveSection}>
+        <BrandText variant="lead">
+          {isFirstEntry
+            ? 'Save this as your first Hue Entry?'
+            : 'Save this Hue Entry?'}
+        </BrandText>
+        <TextInput
+          accessibilityLabel="Entry title"
+          onChangeText={setTitle}
+          placeholder="Optional title"
+          placeholderTextColor={colors.smoke}
+          style={styles.input}
+          value={title}
         />
-      )}
+        <TextInput
+          accessibilityLabel="Private note"
+          multiline
+          onChangeText={setPrivateNote}
+          placeholder="Optional private note"
+          placeholderTextColor={colors.smoke}
+          style={[styles.input, styles.note]}
+          textAlignVertical="top"
+          value={privateNote}
+        />
+        <PrivacyNotice>
+          Save privately stores the Hue Portrait and your optional note in local
+          MVP storage. Raw audio is not saved.
+        </PrivacyNotice>
+        <Button disabled={isLoading} onPress={savePrivately}>
+          Save privately
+        </Button>
+        <Button onPress={startOver} variant="ghost">
+          Start over
+        </Button>
+      </View>
     </Screen>
   );
 }
@@ -656,9 +690,13 @@ function LoadingExperience({
   palette,
   reduceMotion,
 }: LoadingExperienceProps) {
-  const [timedStage, setTimedStage] = useState(1);
+  const [timedStage, setTimedStage] = useState(0);
   const activeStage = isCalibrationLoading ? 0 : timedStage;
-  const canCancel = Boolean(error) || activeStage < 2;
+  const canCancel = Boolean(error) || activeStage === 0;
+  const loadingAnalysis = useMemo(
+    () => createLoadingAnalysis(palette),
+    [palette],
+  );
 
   useEffect(() => {
     if (isCalibrationLoading) {
@@ -666,7 +704,7 @@ function LoadingExperience({
     }
 
     const finishingTimer = setTimeout(() => {
-      setTimedStage(2);
+      setTimedStage(1);
     }, 1400);
 
     return () => {
@@ -675,159 +713,31 @@ function LoadingExperience({
   }, [isCalibrationLoading]);
 
   return (
-    <View style={styles.loadingStack}>
-      <LoadingPortrait
-        palette={palette}
-        reduceMotion={reduceMotion}
-        stage={activeStage}
-      />
-      <LoadingStageMeter activeStage={activeStage} />
-      <BrandText variant="lead">{loadingStages[activeStage].label}</BrandText>
-      <BrandText muted>{loadingStages[activeStage].detail}</BrandText>
-      {error ? <BrandText style={styles.error}>{error}</BrandText> : null}
-      {error ? (
-        <Button onPress={onRetry} variant="secondary">
-          Try again
-        </Button>
-      ) : null}
-      <Button disabled={!canCancel} onPress={onCancel} variant="ghost">
-        Cancel
-      </Button>
-    </View>
-  );
-}
-
-type LoadingPortraitProps = {
-  palette: string[];
-  reduceMotion: boolean;
-  stage: number;
-};
-
-function LoadingPortrait({ palette, reduceMotion, stage }: LoadingPortraitProps) {
-  const [bloom] = useState(() => new Animated.Value(0));
-  const accent = palette[stage % palette.length] ?? colors.lavender;
-  const glow = palette[(stage + 1) % palette.length] ?? colors.amber;
-  const hush = palette[(stage + 2) % palette.length] ?? colors.rose;
-
-  useEffect(() => {
-    if (reduceMotion) {
-      bloom.setValue(0.58);
-      return;
-    }
-
-    bloom.setValue(0);
-    const loop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(bloom, {
-          duration: 1800,
-          easing: Easing.inOut(Easing.sin),
-          toValue: 1,
-          useNativeDriver: true,
-        }),
-        Animated.timing(bloom, {
-          duration: 1600,
-          easing: Easing.inOut(Easing.sin),
-          toValue: 0,
-          useNativeDriver: true,
-        }),
-      ]),
-    );
-
-    loop.start();
-
-    return () => {
-      loop.stop();
-    };
-  }, [bloom, reduceMotion, stage]);
-
-  return (
-    <View accessibilityLabel="Portrait loading preview" style={styles.loadingArt}>
-      <Animated.View
-        style={[
-          styles.loadingBloom,
-          styles.loadingBloomPrimary,
-          {
-            backgroundColor: accent,
-            opacity: bloom.interpolate({
-              inputRange: [0, 1],
-              outputRange: [0.42, 0.72],
-            }),
-            transform: [
-              {
-                scale: bloom.interpolate({
-                  inputRange: [0, 1],
-                  outputRange: [0.88, 1.18],
-                }),
-              },
-            ],
-          },
-        ]}
-      />
-      <Animated.View
-        style={[
-          styles.loadingBloom,
-          styles.loadingBloomSecondary,
-          {
-            backgroundColor: glow,
-            opacity: bloom.interpolate({
-              inputRange: [0, 1],
-              outputRange: [0.22, 0.46],
-            }),
-            transform: [
-              {
-                scale: bloom.interpolate({
-                  inputRange: [0, 1],
-                  outputRange: [1.18, 0.92],
-                }),
-              },
-            ],
-          },
-        ]}
-      />
-      <Animated.View
-        style={[
-          styles.loadingBloom,
-          styles.loadingBloomTertiary,
-          {
-            backgroundColor: hush,
-            opacity: bloom.interpolate({
-              inputRange: [0, 1],
-              outputRange: [0.18, 0.34],
-            }),
-            transform: [
-              {
-                scale: bloom.interpolate({
-                  inputRange: [0, 1],
-                  outputRange: [0.96, 1.12],
-                }),
-              },
-            ],
-          },
-        ]}
-      />
-    </View>
-  );
-}
-
-type LoadingStageMeterProps = {
-  activeStage: number;
-};
-
-function LoadingStageMeter({ activeStage }: LoadingStageMeterProps) {
-  return (
-    <View accessibilityLabel="Portrait progress" style={styles.loadingMeter}>
-      {loadingStages.map((stage, index) => (
-        <View
-          accessibilityLabel={stage.label}
-          accessibilityRole="progressbar"
-          key={stage.label}
-          style={[
-            styles.loadingMeterSegment,
-            index <= activeStage && styles.loadingMeterSegmentActive,
-          ]}
+    <Screen padded={false} scroll={false}>
+      <View style={styles.loadingScreen}>
+        <HueCanvas
+          analysis={loadingAnalysis}
+          interactive={!reduceMotion}
+          reduceMotion={reduceMotion}
+          seedKey={`loading-${palette.join('-')}`}
+          style={styles.loadingCanvas}
         />
-      ))}
-    </View>
+        <View style={styles.loadingOverlay}>
+          <BrandText variant="lead">{loadingStages[activeStage].label}</BrandText>
+          {error ? <BrandText style={styles.error}>{error}</BrandText> : null}
+          {error ? (
+            <Button onPress={onRetry} variant="secondary">
+              Try again
+            </Button>
+          ) : null}
+          {canCancel ? (
+            <Button onPress={onCancel} variant="ghost">
+              Cancel
+            </Button>
+          ) : null}
+        </View>
+      </View>
+    </Screen>
   );
 }
 
@@ -857,55 +767,30 @@ const styles = StyleSheet.create({
     minHeight: 52,
     padding: spacing.md,
   },
-  loadingStack: {
-    backgroundColor: colors.transparent,
-    gap: spacing.md,
-  },
-  loadingArt: {
-    alignSelf: 'center',
-    aspectRatio: 1,
-    backgroundColor: colors.inkSoft,
-    borderColor: colors.line,
-    borderRadius: radius.lg,
-    borderWidth: StyleSheet.hairlineWidth,
-    marginBottom: spacing.sm,
-    overflow: 'hidden',
-    width: '76%',
-  },
-  loadingBloom: {
-    borderRadius: 999,
+  loadingCanvas: {
+    aspectRatio: undefined,
+    borderRadius: 0,
+    borderWidth: 0,
+    bottom: 0,
+    height: '100%',
+    left: 0,
     position: 'absolute',
+    right: 0,
+    top: 0,
+    width: '100%',
   },
-  loadingBloomPrimary: {
-    height: '72%',
-    left: '13%',
-    top: '14%',
-    width: '72%',
+  loadingOverlay: {
+    backgroundColor: colors.transparent,
+    bottom: spacing.xl,
+    gap: spacing.sm,
+    left: spacing.lg,
+    position: 'absolute',
+    right: spacing.lg,
   },
-  loadingBloomSecondary: {
-    height: '58%',
-    left: '-7%',
-    top: '42%',
-    width: '58%',
-  },
-  loadingBloomTertiary: {
-    height: '52%',
-    right: '-4%',
-    top: '-2%',
-    width: '52%',
-  },
-  loadingMeter: {
-    flexDirection: 'row',
-    gap: spacing.xs,
-  },
-  loadingMeterSegment: {
-    backgroundColor: colors.line,
-    borderRadius: radius.pill,
+  loadingScreen: {
+    backgroundColor: colors.ink,
     flex: 1,
-    height: 5,
-  },
-  loadingMeterSegmentActive: {
-    backgroundColor: colors.lavender,
+    overflow: 'hidden',
   },
   note: {
     minHeight: 112,
