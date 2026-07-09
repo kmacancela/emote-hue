@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
+import { Feather } from '@expo/vector-icons';
 import {
   Animated,
   Easing,
@@ -46,6 +47,8 @@ const wordMotionSeeds = [
   { duration: 8700, x: -8, y: 16 },
 ] as const;
 
+const visibleWordCount = 6;
+
 function isLightColor(hex: string) {
   const color = hex.replace('#', '');
   const red = Number.parseInt(color.slice(0, 2), 16);
@@ -56,6 +59,22 @@ function isLightColor(hex: string) {
   return luminance > 0.58;
 }
 
+function createVisibleWords(words: readonly string[], refreshCount: number) {
+  if (refreshCount === 0) {
+    return words.slice(0, visibleWordCount);
+  }
+
+  return words
+    .map((word, index) => ({
+      index,
+      score: (index * 7 + refreshCount * 5) % words.length,
+      word,
+    }))
+    .sort((left, right) => left.score - right.score || left.index - right.index)
+    .slice(0, visibleWordCount)
+    .map((item) => item.word);
+}
+
 export default function CalibrationScreen() {
   const router = useRouter();
   const { saveCalibrations } = useColorCalibration();
@@ -63,6 +82,9 @@ export default function CalibrationScreen() {
   const [activeIndex, setActiveIndex] = useState(0);
   const [selectedLabels, setSelectedLabels] = useState<
     Record<string, string[]>
+  >({});
+  const [wordRefreshCounts, setWordRefreshCounts] = useState<
+    Record<string, number>
   >({});
   const [cardMotion] = useState(() => new Animated.Value(1));
   const [wordMotionValues] = useState(() =>
@@ -72,6 +94,13 @@ export default function CalibrationScreen() {
   const activeHex = activeCard.hex;
   const isLight = isLightColor(activeHex);
   const activeLabels = selectedLabels[activeHex] ?? [];
+  const selectedLabel = activeLabels[0];
+  const visibleWords = useMemo(
+    () =>
+      createVisibleWords(activeCard.words, wordRefreshCounts[activeHex] ?? 0),
+    [activeCard.words, activeHex, wordRefreshCounts],
+  );
+  const isLastColor = activeIndex === calibrationCards.length - 1;
   const textColor = isLight ? colors.ink : colors.mist;
   const mutedTextColor = isLight
     ? 'rgba(17, 16, 24, 0.62)'
@@ -86,12 +115,6 @@ export default function CalibrationScreen() {
   const selectedText = isLight ? colors.mist : colors.ink;
   const hasSelection = useMemo(
     () => Object.values(selectedLabels).some((labels) => labels.length > 0),
-    [selectedLabels],
-  );
-  const selectedColorCount = useMemo(
-    () =>
-      Object.values(selectedLabels).filter((labels) => labels.length > 0)
-        .length,
     [selectedLabels],
   );
 
@@ -154,15 +177,29 @@ export default function CalibrationScreen() {
   function toggleLabel(label: string) {
     setSelectedLabels((current) => {
       const labels = current[activeHex] ?? [];
-      const nextLabels = labels.includes(label)
-        ? labels.filter((item) => item !== label)
-        : [...labels, label];
+      const nextLabels = labels.includes(label) ? [] : [label];
 
       return {
         ...current,
         [activeHex]: nextLabels,
       };
     });
+    void gentleSelection();
+  }
+
+  function showMoreWords() {
+    setWordRefreshCounts((current) => ({
+      ...current,
+      [activeHex]: (current[activeHex] ?? 0) + 1,
+    }));
+    void gentleSelection();
+  }
+
+  function clearSelectedLabel() {
+    setSelectedLabels((current) => ({
+      ...current,
+      [activeHex]: [],
+    }));
     void gentleSelection();
   }
 
@@ -222,8 +259,8 @@ export default function CalibrationScreen() {
               },
             ]}
           >
-            {activeCard.words.map((label, index) => {
-              const isSelected = activeLabels.includes(label);
+            {visibleWords.map((label, index) => {
+              const isSelected = selectedLabel === label;
               const motionValue = wordMotionValues[index];
               const seed = wordMotionSeeds[index];
 
@@ -287,46 +324,74 @@ export default function CalibrationScreen() {
                 </Animated.View>
               );
             })}
+            {selectedLabel && !visibleWords.includes(selectedLabel) ? (
+              <Pressable
+                accessibilityLabel={`Clear ${selectedLabel} for ${activeCard.name}`}
+                accessibilityRole="button"
+                onPress={clearSelectedLabel}
+                style={[
+                  styles.chosenWord,
+                  {
+                    backgroundColor: selectedSurface,
+                  },
+                ]}
+              >
+                <Text style={[styles.chosenLabel, { color: selectedText }]}>
+                  Chosen: {selectedLabel}
+                </Text>
+                <Feather color={selectedText} name="x" size={15} />
+              </Pressable>
+            ) : null}
           </Animated.View>
 
           <View style={styles.footer}>
+            <Pressable
+              accessibilityLabel="Show more words"
+              accessibilityRole="button"
+              onPress={showMoreWords}
+              style={({ pressed }) => [
+                styles.refreshButton,
+                {
+                  backgroundColor: softSurface,
+                },
+                pressed && styles.pressed,
+              ]}
+            >
+              <Feather color={textColor} name="refresh-cw" size={20} />
+            </Pressable>
             <View style={styles.colorControls}>
-              <RoundButton
+              <IconButton
                 accessibilityLabel="Previous color"
-                label="‹"
+                icon="chevron-left"
                 onPress={() => moveToCard(activeIndex - 1)}
                 surfaceColor={softSurface}
                 textColor={textColor}
               />
               <Text style={[styles.colorHint, { color: mutedTextColor }]}>
-                {selectedColorCount > 0
-                  ? `${selectedColorCount} saved`
-                  : activeCard.name}
+                {activeCard.name}
               </Text>
-              <RoundButton
-                accessibilityLabel="Next color"
-                label="›"
-                onPress={() => moveToCard(activeIndex + 1)}
-                surfaceColor={softSurface}
-                textColor={textColor}
-              />
+              {isLastColor ? (
+                <DoneButton
+                  disabled={!hasSelection}
+                  onPress={continueToPrivacy}
+                  surfaceColor={selectedSurface}
+                  textColor={selectedText}
+                />
+              ) : (
+                <IconButton
+                  accessibilityLabel="Next color"
+                  icon="chevron-right"
+                  onPress={() => moveToCard(activeIndex + 1)}
+                  surfaceColor={softSurface}
+                  textColor={textColor}
+                />
+              )}
             </View>
-            <PillButton
-              disabled={!hasSelection}
-              label="Keep these"
-              onPress={continueToPrivacy}
-              textColor={selectedText}
-              surfaceColor={selectedSurface}
-            />
-            <Pressable
-              accessibilityRole="button"
-              onPress={() => router.push('/onboarding/privacy')}
-              style={styles.skipButton}
-            >
-              <Text style={[styles.skipText, { color: mutedTextColor }]}>
-                Skip for now
+            {isLastColor && !hasSelection ? (
+              <Text style={[styles.finishHint, { color: mutedTextColor }]}>
+                Choose one word to finish.
               </Text>
-            </Pressable>
+            ) : null}
           </View>
         </View>
       </SafeAreaView>
@@ -334,53 +399,53 @@ export default function CalibrationScreen() {
   );
 }
 
-type PillButtonProps = {
+type DoneButtonProps = {
   disabled?: boolean;
-  label: string;
   onPress: () => void;
   surfaceColor: string;
   textColor: string;
 };
 
-function PillButton({
+function DoneButton({
   disabled,
-  label,
   onPress,
   surfaceColor,
   textColor,
-}: PillButtonProps) {
+}: DoneButtonProps) {
   return (
     <Pressable
+      accessibilityLabel="Finish colors"
       accessibilityRole="button"
       disabled={disabled}
       onPress={onPress}
       style={({ pressed }) => [
-        styles.pillButton,
+        styles.doneButton,
         { backgroundColor: surfaceColor },
         pressed && !disabled && styles.pressed,
         disabled && styles.disabled,
       ]}
     >
-      <Text style={[styles.pillLabel, { color: textColor }]}>{label}</Text>
+      <Feather color={textColor} name="check" size={18} />
+      <Text style={[styles.doneLabel, { color: textColor }]}>Done</Text>
     </Pressable>
   );
 }
 
-type RoundButtonProps = {
+type IconButtonProps = {
   accessibilityLabel: string;
-  label: string;
+  icon: 'chevron-left' | 'chevron-right';
   onPress: () => void;
   surfaceColor: string;
   textColor: string;
 };
 
-function RoundButton({
+function IconButton({
   accessibilityLabel,
-  label,
+  icon,
   onPress,
   surfaceColor,
   textColor,
-}: RoundButtonProps) {
+}: IconButtonProps) {
   return (
     <Pressable
       accessibilityLabel={accessibilityLabel}
@@ -392,7 +457,7 @@ function RoundButton({
         pressed && styles.pressed,
       ]}
     >
-      <Text style={[styles.roundLabel, { color: textColor }]}>{label}</Text>
+      <Feather color={textColor} name={icon} size={24} />
     </Pressable>
   );
 }
@@ -412,6 +477,23 @@ const styles = StyleSheet.create({
     lineHeight: typography.lineHeight.small,
     minWidth: 112,
     textAlign: 'center',
+  },
+  chosenLabel: {
+    fontFamily: typography.family.body,
+    fontSize: typography.size.small,
+    fontWeight: typography.weight.semibold,
+    lineHeight: typography.lineHeight.small,
+  },
+  chosenWord: {
+    alignItems: 'center',
+    alignSelf: 'center',
+    borderRadius: radius.pill,
+    bottom: spacing.sm,
+    flexDirection: 'row',
+    gap: spacing.xs,
+    minHeight: 36,
+    paddingHorizontal: spacing.md,
+    position: 'absolute',
   },
   content: {
     flex: 1,
@@ -442,22 +524,33 @@ const styles = StyleSheet.create({
     position: 'absolute',
   },
   footer: {
+    alignItems: 'center',
     backgroundColor: colors.transparent,
     gap: spacing.sm,
   },
-  pillButton: {
+  doneButton: {
     alignItems: 'center',
     borderRadius: radius.pill,
+    flexDirection: 'row',
+    gap: spacing.xs,
     justifyContent: 'center',
-    minHeight: 54,
+    minHeight: 48,
+    minWidth: 96,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
   },
-  pillLabel: {
+  doneLabel: {
     fontFamily: typography.family.body,
-    fontSize: typography.size.body,
+    fontSize: typography.size.small,
     fontWeight: typography.weight.semibold,
-    lineHeight: 20,
+    lineHeight: typography.lineHeight.small,
+    textAlign: 'center',
+  },
+  finishHint: {
+    fontFamily: typography.family.body,
+    fontSize: typography.size.small,
+    fontWeight: typography.weight.medium,
+    lineHeight: typography.lineHeight.small,
     textAlign: 'center',
   },
   pressed: {
@@ -476,6 +569,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: spacing.xs,
   },
+  refreshButton: {
+    alignItems: 'center',
+    borderRadius: radius.pill,
+    height: 44,
+    justifyContent: 'center',
+    width: 44,
+  },
   root: {
     flex: 1,
   },
@@ -486,26 +586,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     width: 56,
   },
-  roundLabel: {
-    fontFamily: typography.family.body,
-    fontSize: 36,
-    fontWeight: typography.weight.semibold,
-    lineHeight: 38,
-    marginTop: -3,
-  },
   safeArea: {
     flex: 1,
-  },
-  skipButton: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    minHeight: 44,
-  },
-  skipText: {
-    fontFamily: typography.family.body,
-    fontSize: typography.size.small,
-    fontWeight: typography.weight.semibold,
-    lineHeight: typography.lineHeight.small,
   },
   wordField: {
     backgroundColor: colors.transparent,
