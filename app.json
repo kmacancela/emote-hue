@@ -8,9 +8,12 @@
     "scheme": "emotehue",
     "userInterfaceStyle": "automatic",
     "ios": {
+      "bundleIdentifier": "com.kmacancela.emotehue.dev",
       "supportsTablet": true,
       "infoPlist": {
-        "NSMicrophoneUsageDescription": "Emote Hue uses your microphone only when you choose to record a Hue Entry. Raw audio is not saved by default."
+        "NSMicrophoneUsageDescription": "Emote Hue uses your microphone only when you choose to record a Hue Entry. Raw audio is not saved by default.",
+        "NSSpeechRecognitionUsageDescription": "Allow $(PRODUCT_NAME) to use speech recognition.",
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
@@ -20,7 +23,9 @@
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
-      "permissions": ["android.permission.RECORD_AUDIO"],
+      "permissions": [
+        "android.permission.RECORD_AUDIO"
+      ],
       "predictiveBackGestureEnabled": false
     },
     "web": {
@@ -43,6 +48,13 @@
     ],
     "experiments": {
       "typedRoutes": true
-    }
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "d550e268-35bc-40c2-9f23-0c70645bb9d1"
+      }
+    },
+    "owner": "kmacancela"
   }
 }
