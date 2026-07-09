@@ -55,11 +55,16 @@ import type {
   HuePaletteColor,
 } from '@/src/types/hue';
 import { colors, radius, spacing, typography } from '@/src/theme';
-import { applyHueAdjustment, normalizeHueAnalysis } from '@/src/utils/color';
+import {
+  applyHueAdjustment,
+  normalizeHueAnalysis,
+  withAlpha,
+} from '@/src/utils/color';
 
 const VOICE_REFLECTION_PLACEHOLDER_PREFIX =
   'A private voice reflection was recorded';
 const FINALE_BOOST_MS = 1800;
+const MIN_LOADING_MS = 2600;
 const TILT_INTENSITY_STEP = 0.35;
 const TILT_VISUAL_STEP = 0.025;
 
@@ -153,6 +158,9 @@ export default function PortraitScreen() {
   const scrollRef = useRef<ScrollView | null>(null);
   const saveSectionRef = useRef<View | null>(null);
   const finaleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const analysisRevealTimerRef = useRef<ReturnType<
+    typeof setTimeout
+  > | null>(null);
   const analysisRequestIdRef = useRef(0);
   const tiltIntensityRef = useRef(intensity);
   const intensityValueRef = useRef(intensity);
@@ -227,6 +235,12 @@ export default function PortraitScreen() {
 
     const requestId = analysisRequestIdRef.current + 1;
     analysisRequestIdRef.current = requestId;
+    const requestStartedAt = Date.now();
+
+    if (analysisRevealTimerRef.current) {
+      clearTimeout(analysisRevealTimerRef.current);
+      analysisRevealTimerRef.current = null;
+    }
 
     analyzeReflection(draft.reflection, intensity, calibrations).then(
       (result) => {
@@ -234,14 +248,31 @@ export default function PortraitScreen() {
           return;
         }
 
-        setAnalysis(result);
-        setIntensity(result.intensity);
+        const revealDelay = Math.max(
+          0,
+          MIN_LOADING_MS - (Date.now() - requestStartedAt),
+        );
+
+        analysisRevealTimerRef.current = setTimeout(() => {
+          if (analysisRequestIdRef.current !== requestId) {
+            return;
+          }
+
+          analysisRevealTimerRef.current = null;
+          setAnalysis(result);
+          setIntensity(result.intensity);
+        }, revealDelay);
       },
     );
 
     return () => {
       if (analysisRequestIdRef.current === requestId) {
         analysisRequestIdRef.current += 1;
+      }
+
+      if (analysisRevealTimerRef.current) {
+        clearTimeout(analysisRevealTimerRef.current);
+        analysisRevealTimerRef.current = null;
       }
     };
   }, [
@@ -291,6 +322,10 @@ export default function PortraitScreen() {
     () => () => {
       if (finaleTimerRef.current) {
         clearTimeout(finaleTimerRef.current);
+      }
+
+      if (analysisRevealTimerRef.current) {
+        clearTimeout(analysisRevealTimerRef.current);
       }
     },
     [],
@@ -454,17 +489,12 @@ export default function PortraitScreen() {
     router.replace('/create/record');
   }
 
-  function returnToReflection() {
-    if (router.canGoBack()) {
-      router.back();
-      return;
-    }
-
-    router.replace('/create/record');
-  }
-
   function retryAnalysis() {
     analysisRequestIdRef.current += 1;
+    if (analysisRevealTimerRef.current) {
+      clearTimeout(analysisRevealTimerRef.current);
+      analysisRevealTimerRef.current = null;
+    }
     setAnalysisAttempt((current) => current + 1);
   }
 
@@ -527,7 +557,6 @@ export default function PortraitScreen() {
         error={error}
         isCalibrationLoading={isCalibrationLoading}
         key={analysisAttempt}
-        onCancel={returnToReflection}
         onRetry={retryAnalysis}
         palette={loadingPalette}
         reduceMotion={reduceMotion}
@@ -676,7 +705,6 @@ export default function PortraitScreen() {
 type LoadingExperienceProps = {
   error: string | null;
   isCalibrationLoading: boolean;
-  onCancel: () => void;
   onRetry: () => void;
   palette: string[];
   reduceMotion: boolean;
@@ -685,14 +713,12 @@ type LoadingExperienceProps = {
 function LoadingExperience({
   error,
   isCalibrationLoading,
-  onCancel,
   onRetry,
   palette,
   reduceMotion,
 }: LoadingExperienceProps) {
   const [timedStage, setTimedStage] = useState(0);
   const activeStage = isCalibrationLoading ? 0 : timedStage;
-  const canCancel = Boolean(error) || activeStage === 0;
   const loadingAnalysis = useMemo(
     () => createLoadingAnalysis(palette),
     [palette],
@@ -713,31 +739,28 @@ function LoadingExperience({
   }, [isCalibrationLoading]);
 
   return (
-    <Screen padded={false} scroll={false}>
-      <View style={styles.loadingScreen}>
-        <HueCanvas
-          analysis={loadingAnalysis}
-          interactive={!reduceMotion}
-          reduceMotion={reduceMotion}
-          seedKey={`loading-${palette.join('-')}`}
-          style={styles.loadingCanvas}
-        />
-        <View style={styles.loadingOverlay}>
-          <BrandText variant="lead">{loadingStages[activeStage].label}</BrandText>
-          {error ? <BrandText style={styles.error}>{error}</BrandText> : null}
-          {error ? (
+    <View style={styles.loadingScreen}>
+      <HueCanvas
+        analysis={loadingAnalysis}
+        interactive={!reduceMotion}
+        reduceMotion={reduceMotion}
+        seedKey={`loading-${palette.join('-')}`}
+        style={styles.loadingCanvas}
+      />
+      <View style={styles.loadingOverlay}>
+        <BrandText style={styles.loadingLabel} variant="lead">
+          {loadingStages[activeStage].label}
+        </BrandText>
+        {error ? <BrandText style={styles.error}>{error}</BrandText> : null}
+        {error ? (
+          <View style={styles.loadingActions}>
             <Button onPress={onRetry} variant="secondary">
               Try again
             </Button>
-          ) : null}
-          {canCancel ? (
-            <Button onPress={onCancel} variant="ghost">
-              Cancel
-            </Button>
-          ) : null}
-        </View>
+          </View>
+        ) : null}
       </View>
-    </Screen>
+    </View>
   );
 }
 
@@ -771,21 +794,35 @@ const styles = StyleSheet.create({
     aspectRatio: undefined,
     borderRadius: 0,
     borderWidth: 0,
-    bottom: 0,
-    height: '100%',
-    left: 0,
+    bottom: -72,
+    height: undefined,
+    left: -72,
     position: 'absolute',
-    right: 0,
-    top: 0,
-    width: '100%',
+    right: -72,
+    top: -72,
+    width: undefined,
+  },
+  loadingActions: {
+    alignSelf: 'stretch',
+    maxWidth: 280,
   },
   loadingOverlay: {
+    alignItems: 'center',
     backgroundColor: colors.transparent,
-    bottom: spacing.xl,
+    bottom: 0,
     gap: spacing.sm,
+    justifyContent: 'center',
     left: spacing.lg,
     position: 'absolute',
     right: spacing.lg,
+    top: 0,
+  },
+  loadingLabel: {
+    color: colors.mist,
+    textAlign: 'center',
+    textShadowColor: withAlpha(colors.ink, 0.72),
+    textShadowOffset: { height: 1, width: 0 },
+    textShadowRadius: 16,
   },
   loadingScreen: {
     backgroundColor: colors.ink,
