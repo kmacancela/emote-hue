@@ -59,20 +59,27 @@ function isLightColor(hex: string) {
   return luminance > 0.58;
 }
 
-function createVisibleWords(words: readonly string[], refreshCount: number) {
+function createVisibleWords(
+  words: readonly string[],
+  refreshCount: number,
+  selectedWord?: string,
+) {
   if (refreshCount === 0) {
     return words.slice(0, visibleWordCount);
   }
 
-  return words
+  const shuffledWords = words
+    .filter((word) => word !== selectedWord)
     .map((word, index) => ({
       index,
       score: (index * 7 + refreshCount * 5) % words.length,
       word,
     }))
     .sort((left, right) => left.score - right.score || left.index - right.index)
-    .slice(0, visibleWordCount)
+    .slice(0, selectedWord ? visibleWordCount - 1 : visibleWordCount)
     .map((item) => item.word);
+
+  return selectedWord ? [selectedWord, ...shuffledWords] : shuffledWords;
 }
 
 export default function CalibrationScreen() {
@@ -97,14 +104,15 @@ export default function CalibrationScreen() {
   const selectedLabel = activeLabels[0];
   const visibleWords = useMemo(
     () =>
-      createVisibleWords(activeCard.words, wordRefreshCounts[activeHex] ?? 0),
-    [activeCard.words, activeHex, wordRefreshCounts],
+      createVisibleWords(
+        activeCard.words,
+        wordRefreshCounts[activeHex] ?? 0,
+        selectedLabel,
+      ),
+    [activeCard.words, activeHex, selectedLabel, wordRefreshCounts],
   );
   const isLastColor = activeIndex === calibrationCards.length - 1;
   const textColor = isLight ? colors.ink : colors.mist;
-  const mutedTextColor = isLight
-    ? 'rgba(17, 16, 24, 0.62)'
-    : 'rgba(255, 255, 255, 0.68)';
   const lineColor = isLight
     ? 'rgba(17, 16, 24, 0.22)'
     : 'rgba(255, 255, 255, 0.24)';
@@ -191,14 +199,6 @@ export default function CalibrationScreen() {
     setWordRefreshCounts((current) => ({
       ...current,
       [activeHex]: (current[activeHex] ?? 0) + 1,
-    }));
-    void gentleSelection();
-  }
-
-  function clearSelectedLabel() {
-    setSelectedLabels((current) => ({
-      ...current,
-      [activeHex]: [],
     }));
     void gentleSelection();
   }
@@ -324,41 +324,9 @@ export default function CalibrationScreen() {
                 </Animated.View>
               );
             })}
-            {selectedLabel && !visibleWords.includes(selectedLabel) ? (
-              <Pressable
-                accessibilityLabel={`Clear ${selectedLabel} for ${activeCard.name}`}
-                accessibilityRole="button"
-                onPress={clearSelectedLabel}
-                style={[
-                  styles.chosenWord,
-                  {
-                    backgroundColor: selectedSurface,
-                  },
-                ]}
-              >
-                <Text style={[styles.chosenLabel, { color: selectedText }]}>
-                  Chosen: {selectedLabel}
-                </Text>
-                <Feather color={selectedText} name="x" size={15} />
-              </Pressable>
-            ) : null}
           </Animated.View>
 
           <View style={styles.footer}>
-            <Pressable
-              accessibilityLabel="Show more words"
-              accessibilityRole="button"
-              onPress={showMoreWords}
-              style={({ pressed }) => [
-                styles.refreshButton,
-                {
-                  backgroundColor: softSurface,
-                },
-                pressed && styles.pressed,
-              ]}
-            >
-              <Feather color={textColor} name="refresh-cw" size={20} />
-            </Pressable>
             <View style={styles.colorControls}>
               <IconButton
                 accessibilityLabel="Previous color"
@@ -367,9 +335,13 @@ export default function CalibrationScreen() {
                 surfaceColor={softSurface}
                 textColor={textColor}
               />
-              <Text style={[styles.colorHint, { color: mutedTextColor }]}>
-                {activeCard.name}
-              </Text>
+              <IconButton
+                accessibilityLabel="Show more words"
+                icon="refresh-cw"
+                onPress={showMoreWords}
+                surfaceColor={softSurface}
+                textColor={textColor}
+              />
               {isLastColor ? (
                 <DoneButton
                   disabled={!hasSelection}
@@ -387,11 +359,6 @@ export default function CalibrationScreen() {
                 />
               )}
             </View>
-            {isLastColor && !hasSelection ? (
-              <Text style={[styles.finishHint, { color: mutedTextColor }]}>
-                Choose one word to finish.
-              </Text>
-            ) : null}
           </View>
         </View>
       </SafeAreaView>
@@ -426,14 +393,13 @@ function DoneButton({
       ]}
     >
       <Feather color={textColor} name="check" size={18} />
-      <Text style={[styles.doneLabel, { color: textColor }]}>Done</Text>
     </Pressable>
   );
 }
 
 type IconButtonProps = {
   accessibilityLabel: string;
-  icon: 'chevron-left' | 'chevron-right';
+  icon: 'chevron-left' | 'chevron-right' | 'refresh-cw';
   onPress: () => void;
   surfaceColor: string;
   textColor: string;
@@ -469,31 +435,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: spacing.md,
     justifyContent: 'center',
-  },
-  colorHint: {
-    fontFamily: typography.family.body,
-    fontSize: typography.size.small,
-    fontWeight: typography.weight.medium,
-    lineHeight: typography.lineHeight.small,
-    minWidth: 112,
-    textAlign: 'center',
-  },
-  chosenLabel: {
-    fontFamily: typography.family.body,
-    fontSize: typography.size.small,
-    fontWeight: typography.weight.semibold,
-    lineHeight: typography.lineHeight.small,
-  },
-  chosenWord: {
-    alignItems: 'center',
-    alignSelf: 'center',
-    borderRadius: radius.pill,
-    bottom: spacing.sm,
-    flexDirection: 'row',
-    gap: spacing.xs,
-    minHeight: 36,
-    paddingHorizontal: spacing.md,
-    position: 'absolute',
   },
   content: {
     flex: 1,
@@ -539,20 +480,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
   },
-  doneLabel: {
-    fontFamily: typography.family.body,
-    fontSize: typography.size.small,
-    fontWeight: typography.weight.semibold,
-    lineHeight: typography.lineHeight.small,
-    textAlign: 'center',
-  },
-  finishHint: {
-    fontFamily: typography.family.body,
-    fontSize: typography.size.small,
-    fontWeight: typography.weight.medium,
-    lineHeight: typography.lineHeight.small,
-    textAlign: 'center',
-  },
   pressed: {
     opacity: 0.78,
     transform: [{ scale: 0.985 }],
@@ -568,13 +495,6 @@ const styles = StyleSheet.create({
     backgroundColor: colors.transparent,
     flexDirection: 'row',
     gap: spacing.xs,
-  },
-  refreshButton: {
-    alignItems: 'center',
-    borderRadius: radius.pill,
-    height: 44,
-    justifyContent: 'center',
-    width: 44,
   },
   root: {
     flex: 1,
