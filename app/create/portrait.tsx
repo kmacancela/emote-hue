@@ -3,6 +3,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import {
+  Animated,
+  Easing,
   findNodeHandle,
   Pressable,
   ScrollView,
@@ -62,6 +64,21 @@ const VOICE_REFLECTION_PLACEHOLDER_PREFIX =
 const FINALE_BOOST_MS = 1800;
 const TILT_INTENSITY_STEP = 0.35;
 const TILT_VISUAL_STEP = 0.025;
+
+const loadingStages = [
+  {
+    detail: 'Gathering your palette and color choices.',
+    label: 'Preparing colors...',
+  },
+  {
+    detail: 'Reading the feeling in your words.',
+    label: 'Reading reflection...',
+  },
+  {
+    detail: 'The last colors are settling into place.',
+    label: 'Finishing portrait...',
+  },
+] as const;
 
 const adjustmentControls = [
   { icon: 'feather', label: 'Softer', value: 'softer' },
@@ -140,6 +157,15 @@ export default function PortraitScreen() {
       ? applyIntensity(analysis, finaleIntensity)
       : analysis;
   }, [analysis, finaleIntensity]);
+  const loadingPalette = useMemo(() => {
+    const calibratedColors = calibrations
+      .filter((item) => item.labels.length > 0)
+      .map((item) => item.hex);
+
+    return calibratedColors.length > 0
+      ? calibratedColors
+      : [colors.violetDepth, colors.lavender, colors.amber, colors.rose];
+  }, [calibrations]);
   const activeTiltMode = reduceMotion ? 'touch' : tiltMode;
 
   useEffect(() => {
@@ -599,28 +625,209 @@ export default function PortraitScreen() {
           </View>
         </>
       ) : (
-        <View style={styles.loadingStack}>
-          <BrandText variant="lead">
-            {isCalibrationLoading
-              ? 'Gathering your color choices...'
-              : 'Translating your reflection into color...'}
-          </BrandText>
-          <BrandText muted>
-            A portrait should appear in a moment. You can go back if you want
-            to change your words.
-          </BrandText>
-          {error ? <BrandText style={styles.error}>{error}</BrandText> : null}
-          {error ? (
-            <Button onPress={retryAnalysis} variant="secondary">
-              Try again
-            </Button>
-          ) : null}
-          <Button onPress={returnToReflection} variant="ghost">
-            Back to reflection
-          </Button>
-        </View>
+        <LoadingExperience
+          error={error}
+          isCalibrationLoading={isCalibrationLoading}
+          key={analysisAttempt}
+          onCancel={returnToReflection}
+          onRetry={retryAnalysis}
+          palette={loadingPalette}
+          reduceMotion={reduceMotion}
+        />
       )}
     </Screen>
+  );
+}
+
+type LoadingExperienceProps = {
+  error: string | null;
+  isCalibrationLoading: boolean;
+  onCancel: () => void;
+  onRetry: () => void;
+  palette: string[];
+  reduceMotion: boolean;
+};
+
+function LoadingExperience({
+  error,
+  isCalibrationLoading,
+  onCancel,
+  onRetry,
+  palette,
+  reduceMotion,
+}: LoadingExperienceProps) {
+  const [timedStage, setTimedStage] = useState(1);
+  const activeStage = isCalibrationLoading ? 0 : timedStage;
+  const canCancel = Boolean(error) || activeStage < 2;
+
+  useEffect(() => {
+    if (isCalibrationLoading) {
+      return;
+    }
+
+    const finishingTimer = setTimeout(() => {
+      setTimedStage(2);
+    }, 1400);
+
+    return () => {
+      clearTimeout(finishingTimer);
+    };
+  }, [isCalibrationLoading]);
+
+  return (
+    <View style={styles.loadingStack}>
+      <LoadingPortrait
+        palette={palette}
+        reduceMotion={reduceMotion}
+        stage={activeStage}
+      />
+      <LoadingStageMeter activeStage={activeStage} />
+      <BrandText variant="lead">{loadingStages[activeStage].label}</BrandText>
+      <BrandText muted>{loadingStages[activeStage].detail}</BrandText>
+      {error ? <BrandText style={styles.error}>{error}</BrandText> : null}
+      {error ? (
+        <Button onPress={onRetry} variant="secondary">
+          Try again
+        </Button>
+      ) : null}
+      <Button disabled={!canCancel} onPress={onCancel} variant="ghost">
+        Cancel
+      </Button>
+    </View>
+  );
+}
+
+type LoadingPortraitProps = {
+  palette: string[];
+  reduceMotion: boolean;
+  stage: number;
+};
+
+function LoadingPortrait({ palette, reduceMotion, stage }: LoadingPortraitProps) {
+  const [bloom] = useState(() => new Animated.Value(0));
+  const accent = palette[stage % palette.length] ?? colors.lavender;
+  const glow = palette[(stage + 1) % palette.length] ?? colors.amber;
+  const hush = palette[(stage + 2) % palette.length] ?? colors.rose;
+
+  useEffect(() => {
+    if (reduceMotion) {
+      bloom.setValue(0.58);
+      return;
+    }
+
+    bloom.setValue(0);
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(bloom, {
+          duration: 1800,
+          easing: Easing.inOut(Easing.sin),
+          toValue: 1,
+          useNativeDriver: true,
+        }),
+        Animated.timing(bloom, {
+          duration: 1600,
+          easing: Easing.inOut(Easing.sin),
+          toValue: 0,
+          useNativeDriver: true,
+        }),
+      ]),
+    );
+
+    loop.start();
+
+    return () => {
+      loop.stop();
+    };
+  }, [bloom, reduceMotion, stage]);
+
+  return (
+    <View accessibilityLabel="Portrait loading preview" style={styles.loadingArt}>
+      <Animated.View
+        style={[
+          styles.loadingBloom,
+          styles.loadingBloomPrimary,
+          {
+            backgroundColor: accent,
+            opacity: bloom.interpolate({
+              inputRange: [0, 1],
+              outputRange: [0.42, 0.72],
+            }),
+            transform: [
+              {
+                scale: bloom.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [0.88, 1.18],
+                }),
+              },
+            ],
+          },
+        ]}
+      />
+      <Animated.View
+        style={[
+          styles.loadingBloom,
+          styles.loadingBloomSecondary,
+          {
+            backgroundColor: glow,
+            opacity: bloom.interpolate({
+              inputRange: [0, 1],
+              outputRange: [0.22, 0.46],
+            }),
+            transform: [
+              {
+                scale: bloom.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [1.18, 0.92],
+                }),
+              },
+            ],
+          },
+        ]}
+      />
+      <Animated.View
+        style={[
+          styles.loadingBloom,
+          styles.loadingBloomTertiary,
+          {
+            backgroundColor: hush,
+            opacity: bloom.interpolate({
+              inputRange: [0, 1],
+              outputRange: [0.18, 0.34],
+            }),
+            transform: [
+              {
+                scale: bloom.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [0.96, 1.12],
+                }),
+              },
+            ],
+          },
+        ]}
+      />
+    </View>
+  );
+}
+
+type LoadingStageMeterProps = {
+  activeStage: number;
+};
+
+function LoadingStageMeter({ activeStage }: LoadingStageMeterProps) {
+  return (
+    <View accessibilityLabel="Portrait progress" style={styles.loadingMeter}>
+      {loadingStages.map((stage, index) => (
+        <View
+          accessibilityLabel={stage.label}
+          accessibilityRole="progressbar"
+          key={stage.label}
+          style={[
+            styles.loadingMeterSegment,
+            index <= activeStage && styles.loadingMeterSegmentActive,
+          ]}
+        />
+      ))}
+    </View>
   );
 }
 
@@ -653,6 +860,52 @@ const styles = StyleSheet.create({
   loadingStack: {
     backgroundColor: colors.transparent,
     gap: spacing.md,
+  },
+  loadingArt: {
+    alignSelf: 'center',
+    aspectRatio: 1,
+    backgroundColor: colors.inkSoft,
+    borderColor: colors.line,
+    borderRadius: radius.lg,
+    borderWidth: StyleSheet.hairlineWidth,
+    marginBottom: spacing.sm,
+    overflow: 'hidden',
+    width: '76%',
+  },
+  loadingBloom: {
+    borderRadius: 999,
+    position: 'absolute',
+  },
+  loadingBloomPrimary: {
+    height: '72%',
+    left: '13%',
+    top: '14%',
+    width: '72%',
+  },
+  loadingBloomSecondary: {
+    height: '58%',
+    left: '-7%',
+    top: '42%',
+    width: '58%',
+  },
+  loadingBloomTertiary: {
+    height: '52%',
+    right: '-4%',
+    top: '-2%',
+    width: '52%',
+  },
+  loadingMeter: {
+    flexDirection: 'row',
+    gap: spacing.xs,
+  },
+  loadingMeterSegment: {
+    backgroundColor: colors.line,
+    borderRadius: radius.pill,
+    flex: 1,
+    height: 5,
+  },
+  loadingMeterSegmentActive: {
+    backgroundColor: colors.lavender,
   },
   note: {
     minHeight: 112,
